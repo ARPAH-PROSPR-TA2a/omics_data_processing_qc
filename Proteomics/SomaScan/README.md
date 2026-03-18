@@ -155,6 +155,8 @@ result <- somascan_pca_plots(dat,
 - `log2_transform`: Log2 transform data before PCA (default: TRUE)
 - `mask_sample_ids`: If TRUE, replace sample IDs with "Sample_1", "Sample_2", etc.
 
+**Note:** For categorical color variables with >50 unique levels, the legend is omitted to avoid visual clutter, but the legend title is preserved.
+
 **Returns:** List containing:
 - `pca`: The prcomp object
 - `variance_explained`: Variance explained by each PC

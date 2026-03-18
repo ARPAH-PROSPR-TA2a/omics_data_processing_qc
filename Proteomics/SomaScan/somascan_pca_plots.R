@@ -69,6 +69,9 @@ somascan_pca_plots <- function(dat,
     dfp <- plot_df
     if (drop_na_color) dfp <- dfp[!is.na(dfp[[cv]]), , drop = FALSE]
     
+    n_levels <- length(unique(dfp[[cv]]))
+    omit_legend <- n_levels > 50
+    
     p <- ggplot2::ggplot(dfp, ggplot2::aes(x = .data[[xcol]], y = .data[[ycol]], color = .data[[cv]])) +
       ggplot2::geom_point(alpha = 0.75, size = 2) +
       ggplot2::labs(
@@ -77,6 +80,13 @@ somascan_pca_plots <- function(dat,
         y = ve_lbl(pcy)
       ) +
       ggplot2::theme_classic()
+    
+    if (omit_legend) {
+      p <- p + ggplot2::labs(subtitle = paste0(cv)) +
+        ggplot2::theme(legend.position = "none")
+    } else {
+      p <- p + ggplot2::labs(color = cv)
+    }
     
     plots[[cv]] <- p
   }
