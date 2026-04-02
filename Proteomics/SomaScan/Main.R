@@ -30,7 +30,7 @@ source("somascan_pca_plots.R")
 output_dir <- "output"
 
 # Privacy settings (set to TRUE to mask sample IDs)
-MASK_IDS <- FALSE
+MASK_IDS <- TRUE
 
 # Timepoint column for baseline filtering (set NULL if not applicable)
 TIME_COL <- "Followup"        # Column name containing timepoint info
@@ -53,6 +53,9 @@ dir.create(file.path(output_dir, "04_pca", "plots"), recursive = TRUE, showWarni
 # ==============================================================================
 
 cat("=== Step 1: Limit of Detection QC ===\n")
+
+# Store original SampleIds BEFORE passing to lod_qc (mask may alter them)
+original_sample_ids <- dat$SampleId
 
 lod_result <- somascan_lod_qc(dat,
                               snr_thresh = 2,
@@ -80,16 +83,22 @@ write.csv(lod_result$per_sample,
           file.path(output_dir, "01_lod", paste0("per_sample_lod", lod_suffix, ".csv")), 
           row.names = FALSE)
 
-# Extract passing sample IDs for downstream steps
-passed_sample_ids <- lod_result$per_sample$SampleId[lod_result$per_sample$sample_pass]
-cat("Extracted", length(passed_sample_ids), "passing sample IDs\n")
+# ==============================================================================
+# Extract passing sample indices robustly (handles masked vs original IDs)
+# ==============================================================================
+
+# lod_result$per_sample rows correspond 1-to-1 with the input dat rows,
+# so we can use positional indexing regardless of whether IDs were masked.
+passing_indices <- which(lod_result$per_sample$sample_pass)
 
 # ==============================================================================
 # STEP 2: Filter to passing samples
 # ==============================================================================
 
 cat("\n=== Filtering to passing samples ===\n")
-dat_filtered <- dat[dat$SampleId %in% passed_sample_ids, ]
+
+dat_filtered <- dat[passing_indices, ]
+
 cat("Samples after filtering:", nrow(dat_filtered), "\n")
 
 # ==============================================================================
