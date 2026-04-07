@@ -50,7 +50,7 @@ The Olink QC pipeline consists of two main QC functions and two helper functions
 
 **Method:**
 1. Filter data to PLATE_CONTROL sample type
-2. Group by Block + Plate + Replicate (Investigator_ID) + AssayType
+2. Group by Block + Plate + Replicate (WellID) + AssayType
 3. Sum counts for each group
 4. Pivot to wide format
 5. Apply pass/fail thresholds to each assay type
@@ -66,7 +66,7 @@ The Olink QC pipeline consists of two main QC functions and two helper functions
 | amp_ctrl | > 500 | Same as sample QC |
 
 **Plate Pass Criteria:**
-- At least 3 of 4 replicates must pass all four assay types
+- At least 3 replicates (wells) must pass all four assay types
 - This accounts for potential random failures while ensuring overall plate quality
 
 **Failed Plate NPX Check:**

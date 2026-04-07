@@ -29,7 +29,7 @@ The pipeline expects Olink long-format data (CSV) with these columns:
 | `Count` | Read count | Yes |
 | `PlateID` | Plate identifier | Yes |
 | `Block` | Block number | For plate control QC |
-| `Investigator_ID` | Replicate identifier | For plate control QC |
+| `WellID` | Replicate identifier | For plate control QC |
 | `NPX` | Normalized protein expression | For plate control QC |
 
 ## Main Functions
@@ -81,7 +81,7 @@ result <- plate_control_qc(df,
                            sample_type_keep = "PLATE_CONTROL",
                            block_col = "Block",
                            plate_col = "PlateID",
-                           replicate_col = "Investigator_ID",
+                           replicate_col = "WellID",
                            assay_type_col = "AssayType",
                            count_col = "Count",
                            npx_col = "NPX")
