@@ -19,8 +19,9 @@ source("somascan_pca_plots.R")
 # dat <- read.delim("your_data.adat", stringsAsFactors = FALSE)
 
 # For testing, use example data:
-# dat <- read.table("example_data_v4.1_plasma.adat", header = TRUE, sep = "\t", 
-#                   stringsAsFactors = FALSE, comment.char = "")
+# install.packages(SomaDataIO)
+# library(SomaDataIO)
+# dat <- read_adat("example_data_v4.1_plasma.adat")
 
 # ==============================================================================
 # CONFIGURATION
