@@ -32,6 +32,9 @@ output_dir <- "output"
 # Privacy settings (set to TRUE to mask sample IDs)
 MASK_IDS <- TRUE
 
+# Run technical replicate correlation (set to FALSE if dataset has no technical replicates)
+RUN_TECHREP <- TRUE
+
 # Timepoint column for baseline filtering (set NULL if not applicable)
 TIME_COL <- "Followup"        # Column name containing timepoint info
 BASELINE_VALUES <- c(0, "Baseline", "BL")  # Values representing baseline
@@ -136,31 +139,37 @@ write.csv(norm_result$per_sample,
 # STEP 4: Technical Replicate Correlations
 # ==============================================================================
 
-cat("\n=== Step 3: Technical Replicate Correlations ===\n")
-
-techrep_result <- somascan_techrep_cor(dat_filtered,
-                                       use_qc = TRUE,
-                                       include_only_baseline = TRUE,
-                                       time_col = TIME_COL,
-                                       baseline_values = BASELINE_VALUES,
-                                       mask_sample_ids = MASK_IDS)
-
-cat("Sample IDs with replicates:", techrep_result$n_ids_with_reps, "\n")
-
-if (nrow(techrep_result$results) > 0) {
-  cat("Mean correlation:", round(mean(techrep_result$results$r, na.rm = TRUE), 3), "\n")
+if (RUN_TECHREP) {
   
-  # Save outputs
-  write.csv(data.frame(
-    n_rows = techrep_result$n_rows_used,
-    n_ids_with_reps = techrep_result$n_ids_with_reps,
-    mean_r = mean(techrep_result$results$r, na.rm = TRUE),
-    median_r = median(techrep_result$results$r, na.rm = TRUE)
-  ), file.path(output_dir, "03_techrep", "techrep_summary.csv"), row.names = FALSE)
+  cat("\n=== Step 3: Technical Replicate Correlations ===\n")
   
-  write.csv(techrep_result$results,
-            file.path(output_dir, "03_techrep", paste0("pairwise_correlations", lod_suffix, ".csv")),
-            row.names = FALSE)
+  techrep_result <- somascan_techrep_cor(dat_filtered,
+                                           use_qc = TRUE,
+                                           include_only_baseline = TRUE,
+                                           time_col = TIME_COL,
+                                           baseline_values = BASELINE_VALUES,
+                                           mask_sample_ids = MASK_IDS)
+  
+  cat("Sample IDs with replicates:", techrep_result$n_ids_with_reps, "\n")
+  
+  if (nrow(techrep_result$results) > 0) {
+    cat("Mean correlation:", round(mean(techrep_result$results$r, na.rm = TRUE), 3), "\n")
+    
+    write.csv(data.frame(
+      n_rows = techrep_result$n_rows_used,
+      n_ids_with_reps = techrep_result$n_ids_with_reps,
+      mean_r = mean(techrep_result$results$r, na.rm = TRUE),
+      median_r = median(techrep_result$results$r, na.rm = TRUE)
+    ), file.path(output_dir, "03_techrep", "techrep_summary.csv"), row.names = FALSE)
+    
+    write.csv(techrep_result$results,
+              file.path(output_dir, "03_techrep", paste0("pairwise_correlations", lod_suffix, ".csv")),
+              row.names = FALSE)
+  }
+  
+} else {
+  cat("\n=== Step 3: Technical Replicate Correlations ===\n")
+  cat("Skipped (RUN_TECHREP = FALSE)\n")
 }
 
 # ==============================================================================

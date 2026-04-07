@@ -1,6 +1,7 @@
 somascan_pca_plots <- function(dat,
                                sample_type_col = "SampleType",
                                sample_label = "Sample",
+                               sample_id_col = "SampleId",
                                seq_prefix = "seq.",
                                id_cols = c("SampleId", "PlateId", "SlideId"),
                                color_vars = c("PlateId", "SlideId", "PlatePosition", "Subarray",
