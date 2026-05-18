@@ -62,7 +62,7 @@ result <- olink_sample_qc(df,
 
 **Parameters:**
 - `cutoff`: Number of standard deviations for outlier detection (default: 3)
-- `max_prune`: Number of samples to remove if >15% fail (default: 0)
+- `max_prune`: Number of samples to remove if <80% pass (default: 0)
 - `output_dir`: Directory for saving summary CSV (default: "output")
 - `mask_sample_ids`: If TRUE, mask sample IDs in saved outputs
 
@@ -79,7 +79,7 @@ result <- olink_sample_qc(df,
 - `summary_file`: Path to saved summary CSV
 
 **Behavior:**
-- If >15% of samples fail, a warning is issued with instructions to re-run with `max_prune`
+- If <80% of samples pass, a warning is issued with instructions to re-run with `max_prune`
 - When `max_prune > 0`, iteratively removes worst samples until fail rate improves
 - Automatically saves summary to CSV in `output_dir`
 - Only prints sample lists (passed/failed/removed) when pruning is actually used

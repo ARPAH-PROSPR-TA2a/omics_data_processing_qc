@@ -84,8 +84,8 @@ olink_sample_qc <- function(df,
   n_fail_any <- sum(sample_stats$any_fail, na.rm = TRUE)
   pct_fail_any <- (n_fail_any / total_samples) * 100
   
-  if (pct_fail_any > 15 && max_prune == 0) {
-    warning(">15% of samples fail QC (", round(pct_fail_any, 1), "%). ",
+  if (pct_fail_any > 20 && max_prune == 0) {
+    warning(">20% of samples fail QC (", round(pct_fail_any, 1), "%). ",
             "To prune failing samples, re-run with max_prune > 0")
     message("\nTo prune samples, re-run with: max_prune = N ",
             "(where N is the number of samples to remove)")
