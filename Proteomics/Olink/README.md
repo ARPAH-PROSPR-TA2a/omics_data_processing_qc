@@ -7,179 +7,181 @@ Quality control pipeline for Olink proteomics data.
 1. Install R (version 4.0 or higher recommended)
 2. Install required packages:
    ```r
-   install.packages(c("dplyr", "tidyr"))
+   install.packages(c("ggplot2", "tidyr"))
    ```
 3. Load the pipeline functions:
    ```r
    source("olink_sample_qc.R")
-   source("plate_control_qc.R")
-   source("save_sample_qc_outputs.R")
-   source("save_plate_control_qc_outputs.R")
+   source("olink_calculate_pca.R")
+   source("olink_pca_plots.R")
    ```
 
 ## Data Format
 
-The pipeline expects Olink long-format data (CSV) with these columns:
+The pipeline expects Olink long-format data with these columns:
 
-| Column | Description | Required |
+| Column | Description | Examples |
 |--------|-------------|----------|
-| `SAMPLE_ID` | Sample identifier | Yes |
-| `SampleType` | Type of sample (e.g., SAMPLE, PLATE_CONTROL) | Yes |
-| `AssayType` | Type of assay (assay, ext_ctrl, inc_ctrl, amp_ctrl) | Yes |
-| `Count` | Read count | Yes |
-| `PlateID` | Plate identifier | Yes |
-| `Block` | Block number | For plate control QC |
-| `WellID` | Replicate identifier | For plate control QC |
-| `NPX` | Normalized protein expression | For plate control QC |
+| `SAMPLE_ID` | Sample identifier | TOP140499 |
+| `NPX` | Protein expression values | Numeric |
+| `AssayType` | Type of assay | assay, ext_ctrl, inc_ctrl |
+| `SampleType` | Type of sample | SAMPLE, CONTROL, etc. |
+| `PlateID` | Plate identifier | 1, 2, 3 |
+| `SampleQC` | Sample quality flag | PASS, WARN |
+| `OlinkID` | Protein identifier | OID45518 |
+| `Assay` | Protein name | A1BG, APOA1 |
+
+**Note:** By default, only rows where `AssayType == "assay"` AND `SampleType == "SAMPLE"` are included. This excludes all control samples (PLATE_CONTROL, NEGATIVE_CONTROL, SAMPLE_CONTROL, etc.).
+
+### Example Structure
+```
+SAMPLE_ID  | AssayType | NPX     | PlateID | SampleQC
+-----------|-----------|---------|---------|---------
+S001       | assay     | 5.432   | 1       | PASS
+S001       | assay     | 3.221   | 1       | PASS
+S002       | assay     | 4.891   | 1       | PASS
+```
 
 ## Main Functions
 
 ### 1. olink_sample_qc
 
-Sample-level quality control based on read counts for assay and control measurements.
+Sample-level quality control based on median and IQR of NPX values.
 
 ```r
 result <- olink_sample_qc(df,
-                          sample_id_col = "SAMPLE_ID",
-                          sample_type_col = "SampleType",
-                          sample_type_keep = "SAMPLE",
+                          sample_col = "SAMPLE_ID",
+                          value_col = "NPX",
                           assay_type_col = "AssayType",
-                          count_col = "Count",
-                          assay_label = "assay",
-                          ext_label = "ext_ctrl",
-                          inc_label = "inc_ctrl",
-                          amp_label = "amp_ctrl",
-                          mask_sample_id = FALSE)
+                          assay_keep = "assay",
+                          cutoff = 3,
+                          max_prune = 0,
+                          output_dir = "output",
+                          mask_sample_ids = FALSE)
 ```
 
 **Parameters:**
-- `sample_type_keep`: Sample type to keep (default: "SAMPLE")
-- `assay_label`, `ext_label`, `inc_label`, `amp_label`: Names for assay types in data
-- `mask_sample_id`: If TRUE, replace sample IDs with masked IDs
-
-**QC Thresholds:**
-- Assay counts > 10,000
-- Extension control counts > 500
-- Incubation control counts > 500
-- Amplification control counts > 500
+- `cutoff`: Number of standard deviations for outlier detection (default: 3)
+- `max_prune`: Number of samples to remove if >15% fail (default: 0)
+- `output_dir`: Directory for saving summary CSV (default: "output")
+- `mask_sample_ids`: If TRUE, mask sample IDs in saved outputs
 
 **Returns:** List containing:
-- `qc_counts`: Per-sample counts and pass/fail for each assay type
-- `qc_summary`: Summary statistics (total samples, failures by type)
-- `passed_samples`: Vector of sample IDs passing all QC checks
-- `id_map`: Mapping between original and masked IDs (if mask_sample_id = TRUE)
+- `summary`: Summary statistics (total, pass/fail counts)
+- `per_sample`: Per-sample statistics with pass/fail flags, including:
+  - `sample_median`, `sample_iqr`: Sample-specific values
+  - `global_median`, `global_iqr`: Population-level values
+  - `median_z`, `iqr_z`: Z-scores relative to population
+  - `median_fail`, `iqr_fail`, `any_fail`: Pass/fail flags
+- `passed_samples`: Vector of passing sample IDs
+- `failed_samples`: Vector of failing sample IDs
+- `removed_samples`: Vector of removed sample IDs
+- `summary_file`: Path to saved summary CSV
+
+**Behavior:**
+- If >15% of samples fail, a warning is issued with instructions to re-run with `max_prune`
+- When `max_prune > 0`, iteratively removes worst samples until fail rate improves
+- Automatically saves summary to CSV in `output_dir`
+- Only prints sample lists (passed/failed/removed) when pruning is actually used
+- If fewer than 80% of samples pass QC, the pipeline prints a prominent warning to prune and save the filtered analysis dataset before downstream steps
 
 ---
 
-### 2. plate_control_qc
+### 2. olink_calculate_pca
 
-Plate-level quality control using PLATE_CONTROL samples.
+Calculate principal components from the protein matrix.
 
 ```r
-result <- plate_control_qc(df,
-                           sample_type_col = "SampleType",
-                           sample_type_keep = "PLATE_CONTROL",
-                           block_col = "Block",
-                           plate_col = "PlateID",
-                           replicate_col = "WellID",
-                           assay_type_col = "AssayType",
-                           count_col = "Count",
-                           npx_col = "NPX")
+result <- olink_calculate_pca(df,
+                               sample_col = "SAMPLE_ID",
+                               olink_id_col = "OlinkID",
+                               value_col = "NPX",
+                               assay_type_col = "AssayType",
+                               assay_keep = "assay",
+                               sample_type_col = "SampleType",
+                               sample_type_keep = "SAMPLE",
+                               impute_missing = TRUE,
+                               mask_sample_ids = FALSE)
 ```
 
 **Parameters:**
-- `sample_type_keep`: Sample type for plate controls (default: "PLATE_CONTROL")
-- `block_col`, `plate_col`, `replicate_col`: Column names for grouping
+- `olink_id_col`: Column containing protein identifiers (default: "OlinkID")
+- `sample_type_col`: Column containing sample type (default: "SampleType")
+- `sample_type_keep`: Value indicating sample rows to keep (default: "SAMPLE")
+- `impute_missing`: Replace remaining NAs with median (default: TRUE)
+- `missingness_threshold`: Remove proteins with >10% missing values (default: 0.10, adjusts to 5% for n <= 88)
+- `mask_sample_ids`: If TRUE, also return a masked version of the PCA scores for saving
 
-**QC Thresholds:**
-- Assay counts > 10,000
-- Extension control counts > 1,000
-- Incubation control counts > 1,000
-- Amplification control counts > 500
-
-**Plate Pass Criteria:** At least 3 of 4 replicates must pass
+**Note:** Filters to rows where `AssayType == assay_keep` AND `SampleType == sample_type_keep` to exclude control samples.
 
 **Returns:** List containing:
-- `qc_counts`: Per-block/per-plate counts and pass/fail
-- `qc_summary`: Plate-level summary (pass if >= 3 replicates pass)
-- `failed_plates`: List of failed plates (user-friendly labels)
-- `failed_plate_npx_check`: Whether failed plates have reported NPX values
-- `failed_plate_npx_message`: Summary message
+- `scores`: Sample scores on PC1-PC5
+- `masked_scores`: Masked sample scores (same values as `scores`, but with generic IDs when `mask_sample_ids = TRUE`)
+- `variance_explained`: Proportion of variance explained by each PC
+- `loadings`: Protein loadings on PC1-PC5
+- `n_proteins`: Number of proteins used after filtering
+- `n_proteins_total`: Total number of proteins in data
+- `n_samples`: Number of samples used
+- `proteins_removed`: Number of proteins removed due to missingness
+- `pca_object`: The full prcomp object
+
+**Note:** Handles missing data by:
+1. Removing proteins with >10% missingness (or >5% for small datasets)
+2. Imputing remaining NAs with protein-specific median
 
 ---
 
-### 3. save_sample_qc_outputs
+### 3. olink_pca_plots
 
-Save sample QC results to CSV files.
+Generate PCA plots colored by various variables.
 
 ```r
-paths <- save_sample_qc_outputs(qc_res, study_name, base_dir = ".")
+result <- olink_pca_plots(pca_result,
+                          metadata,
+                          sample_col = "SAMPLE_ID",
+                          color_vars = c("PlateID", "SampleQC"),
+                          pcs = c(1, 2))
 ```
 
 **Parameters:**
-- `qc_res`: Output from `olink_sample_qc()`
-- `study_name`: Name for output files
-- `base_dir`: Base directory for output (default: ".")
+- `pca_result`: Output from `olink_calculate_pca()`
+- `metadata`: Data frame with sample metadata (must contain sample_col)
+- `color_vars`: Variables to color plots by (default: PlateID, SampleQC)
+- `pcs`: Which PCs to plot (default: c(1, 2))
 
-**Returns:** List with paths to created files.
+**Note:** For categorical color variables with >50 unique levels, the legend is omitted to avoid visual clutter, but the legend title is preserved.
 
----
+**Returns:** List containing:
+- `plots`: Named list of ggplot objects (one per color_var)
+- `scores`: PCA scores merged with metadata
+- `variance_explained`: Variance explained by each PC
 
-### 4. save_plate_control_qc_outputs
+## Running the Pipeline
 
-Save plate control QC results to CSV files.
-
-```r
-paths <- save_plate_control_qc_outputs(qc_res, study_name, base_dir = ".")
-```
-
-**Parameters:**
-- `qc_res`: Output from `plate_control_qc()`
-- `study_name`: Name for output files
-- `base_dir`: Base directory for output (default: ".")
-
-**Returns:** List with paths to created files.
-
----
-
-## Example Usage
-
-```r
-# Load functions
-source("olink_sample_qc.R")
-source("plate_control_qc.R")
-source("save_sample_qc_outputs.R")
-source("save_plate_control_qc_outputs.R")
-
-# Load data
-df <- read.csv("your_olink_data.csv", stringsAsFactors = FALSE)
-
-# Run sample QC
-sample_qc_result <- olink_sample_qc(df, mask_sample_id = FALSE)
-save_sample_qc_outputs(sample_qc_result, "MyStudy")
-
-# Run plate control QC
-plate_qc_result <- plate_control_qc(df)
-save_plate_control_qc_outputs(plate_qc_result, "MyStudy")
-```
+See `Main.R` for a complete example of running all QC steps in sequence.
 
 ## Output Files
 
-When running the save functions, outputs are organized as:
+When using the save functions, outputs are organized as:
 
 ```
-QC_StudyName/
-├── StudyName_qc_counts.csv
-├── StudyName_qc_summary.csv
-├── StudyName_plate_control_qc_counts.csv
-├── StudyName_plate_control_qc_summary.csv
-├── StudyName_failed_plate_npx_check.csv
-└── StudyName_failed_plates.txt
+output/
+├── olink_sample_qc_summary.csv     # QC summary statistics
+├── sample_qc_per_sample.csv        # Per-sample QC results
+├── pca_result.rds                # Full PCA result object (masked if requested)
+├── variance_explained.csv        # Variance explained per PC
+├── pca_loadings.csv              # Protein loadings
+├── pca_scores.csv               # Sample scores (masked if requested)
+└── plots/
+    ├── pca_PlateID.png          # PCA colored by plate
+    └── pca_SampleQC.png         # PCA colored by sample quality
 ```
+
+When `MASK_IDS = TRUE` in Main.R, CSV filenames will include `_masked`.
 
 ## Privacy
 
-Set `mask_sample_id = TRUE` in `olink_sample_qc()` to replace sample IDs with generic labels (MASKED_SAMPLE_0001, etc.). An ID mapping table is returned in `$id_map` for reference if needed later.
+Set `MASK_IDS = TRUE` in `Main.R` to mask sample IDs when saving CSV files. The functions themselves keep real IDs internally to enable merging with metadata. Masking is applied only when writing output files.
 
 ## Contact
 

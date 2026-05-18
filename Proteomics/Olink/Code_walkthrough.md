@@ -4,129 +4,129 @@ This document provides technical details on how each function works.
 
 ## Overview
 
-The Olink QC pipeline consists of two main QC functions and two helper functions for saving outputs:
+The Olink QC pipeline consists of three functions that can be run in sequence:
 
-1. **olink_sample_qc** - Sample-level quality control
-2. **plate_control_qc** - Plate-level quality control using plate controls
-3. **save_sample_qc_outputs** - Save sample QC results
-4. **save_plate_control_qc_outputs** - Save plate control QC results
-
----
+1. **Sample QC** - Identifies samples with abnormal median or IQR
+2. **PCA Calculation** - Computes principal components from protein matrix
+3. **PCA Plots** - Generates visualizations colored by batch/quality variables
 
 ## Function Details
 
 ### olink_sample_qc
 
-**Purpose:** Assess individual sample quality using read counts for assay and control measurements.
+**Purpose:** Identify samples with outlier median or interquartile range (IQR) of NPX values.
 
 **Method:**
-1. Filter data to requested sample type (default: SAMPLE)
-2. Group by sample ID and assay type
-3. Sum total counts per sample per assay type
-4. Pivot to wide format (one row per sample, columns for each assay type)
-5. Apply pass/fail thresholds to each assay type
-6. Calculate overall pass/fail (all must pass)
+1. Filter to `assay` rows only (exclude controls)
+2. For each sample, calculate:
+   - Median of all NPX values
+   - IQR of all NPX values
+3. Calculate global thresholds:
+   - `median_low/high` = mean(medians) ± cutoff × sd(medians)
+   - `iqr_low/high` = mean(IQRs) ± cutoff × sd(IQRs)
+4. Flag samples where median or IQR falls outside thresholds
+5. If >15% fail, issue warning and suggest pruning
+6. If `max_prune > 0`, iteratively remove worst samples
 
-**Thresholds:**
-| Assay Type | Threshold | Rationale |
-|------------|-----------|-----------|
-| assay | > 10,000 | Sufficient sequencing depth |
-| ext_ctrl | > 500 | Extension control check |
-| inc_ctrl | > 500 | Incubation control check |
-| amp_ctrl | > 500 | Amplification control check |
+**Pruning algorithm:**
+- For each iteration, calculate combined deviation: |median - mean| + |iqr - mean|
+- Remove sample with maximum deviation
+- Recalculate thresholds with remaining samples
+- Repeat until `max_prune` samples removed or no failures remain
 
-**Missing Assay Types:** If a sample has no data for a particular assay type (e.g., no extension controls run), that control is treated as passing (set to 0).
-
-**Key Decisions:**
-- Uses Count column (not NPX) for QC - more direct measure of sample quality
-- Requires ALL four assay types to pass (strict)
-- Returns both detailed per-sample results and summary statistics
+**Key decisions:**
+- Uses SD-based thresholds (default: 3 SD) following standard Olink conventions
+- 15% threshold is protective against over-pruning
+- Combined deviation metric balances both median and IQR outliers
+- Sample lists (passed/failed/removed) only printed when pruning is actually used
+- Global median/IQR added to per_sample output for context
+- If fewer than 80% of samples pass QC, the main pipeline prints a prominent warning and expects the filtered set to be treated as the analysis dataset
 
 ---
 
-### plate_control_qc
+### olink_calculate_pca
 
-**Purpose:** Assess plate-level quality using PLATE_CONTROL samples.
+**Purpose:** Compute principal components from the protein expression matrix.
 
 **Method:**
-1. Filter data to PLATE_CONTROL sample type
-2. Group by Block + Plate + Replicate (WellID) + AssayType
-3. Sum counts for each group
-4. Pivot to wide format
-5. Apply pass/fail thresholds to each assay type
-6. For each plate: require at least 3 of 4 replicates to pass
-7. Check if failed plates have any reported NPX values
+1. Filter to `assay` rows AND `SampleType == "SAMPLE"` (excludes all controls)
+2. Pivot from long to wide format (sample × protein using OlinkID)
+3. Remove proteins with >10% missing values (or >5% for n ≤ 88)
+4. Impute remaining NAs with column median
+5. Run PCA with scaling and centering
+6. Extract scores (PC1-PC5), loadings, and variance explained
 
-**Thresholds:**
-| Assay Type | Threshold | Rationale |
-|------------|-----------|-----------|
-| assay | > 10,000 | Higher for plate controls |
-| ext_ctrl | > 1,000 | Higher for plate controls |
-| inc_ctrl | > 1,000 | Higher for plate controls |
-| amp_ctrl | > 500 | Same as sample QC |
+**Masking:**
+- Keeps real `SampleID` values in `scores` for downstream merging
+- Returns `masked_scores` for saving when `mask_sample_ids = TRUE`
 
-**Plate Pass Criteria:**
-- At least 3 replicates (wells) must pass all four assay types
-- This accounts for potential random failures while ensuring overall plate quality
+**Missing data handling:**
+- Proteins with high missingness (>10%) are removed entirely
+- Remaining missing values are imputed with protein-specific median
+- This approach preserves samples while ensuring complete matrix for PCA
 
-**Failed Plate NPX Check:**
-- After identifying failed plates, checks whether those plates have any reported NPX values
-- If failed plates have NPX data, those samples may need review
-
-**Key Decisions:**
-- Uses Block + Plate as the grouping unit (matches Olink reporting)
-- Higher thresholds for plate controls vs. samples (more stringent)
-- Returns user-friendly "Block_X_Plate_Y" labels for failed plates
+**Key decisions:**
+- Wide matrix orientation: proteins as columns, samples as rows (standard for PCA)
+- Scale = TRUE, Center = TRUE (standard for proteomics data)
+- 10% missingness threshold follows Olink best practices
 
 ---
 
-### save_sample_qc_outputs
+### olink_pca_plots
 
-**Purpose:** Save sample QC results to CSV files in a standardized location.
+**Purpose:** Generate publication-ready PCA visualizations.
 
-**Output Files:**
-- `{study_name}_qc_counts.csv` - Detailed per-sample results
-- `{study_name}_qc_summary.csv` - Summary statistics
+**Method:**
+1. Merge PCA scores with metadata
+2. For each color variable:
+   - Filter to non-missing values
+   - Create scatter plot with points colored by variable
+   - Format axes with variance explained percentages
+3. Return list of ggplot objects
 
----
+**Color handling:**
+- Categorical variables: discrete color scale
+- Continuous variables: gradient scale
+- Handles both factor and character types
 
-### save_plate_control_qc_outputs
+**Key decisions:**
+- Separate function from calculation (cleaner modularity)
+- One plot per variable (avoids cluttered multi-panel plots)
+- Variance explained in axis labels (standard for PCA plots)
+- Legends are fully suppressed when a categorical color variable has >50 levels
 
-**Purpose:** Save plate control QC results to CSV files.
-
-**Output Files:**
-- `{study_name}_plate_control_qc_counts.csv` - Detailed per-replicate results
-- `{study_name}_plate_control_qc_summary.csv` - Plate-level summary
-- `{study_name}_failed_plate_npx_check.csv` - NPX check results
-- `{study_name}_failed_plates.txt` - Simple list of failed plates
+**Privacy note:** If `mask_sample_ids = TRUE`, save `masked_scores` rather than `scores`.
 
 ---
 
 ## Pipeline Integration
 
-To run both QC checks:
+To chain functions together:
 
 ```r
-# Load data
-df <- read.csv("your_data.csv", stringsAsFactors = FALSE)
+# Step 1: Sample QC
+qc <- olink_sample_qc(df, max_prune = 5)
 
-# Sample QC
-sample_qc <- olink_sample_qc(df)
-save_sample_qc_outputs(sample_qc, "MyStudy")
+# Step 2: Filter to passing samples
+df_pass <- df[df$SAMPLE_ID %in% qc$passed_samples, ]
 
-# Plate Control QC
-plate_qc <- plate_control_qc(df)
-save_plate_control_qc_outputs(plate_qc, "MyStudy")
+# Step 3: PCA calculation
+pca <- olink_calculate_pca(df_pass)
 
-# Check results
-print(sample_qc$qc_summary)
-print(plate_qc$failed_plates)
+# Step 4: Generate plots
+metadata <- df_pass[!duplicated(df_pass$SAMPLE_ID), 
+                    c("SAMPLE_ID", "PlateID", "SampleQC")]
+plots <- olink_pca_plots(pca, metadata, color_vars = c("PlateID", "SampleQC"))
+
+# View plots
+plots$plots$PlateID
+plots$plots$SampleQC
 ```
 
 ## Dependencies
 
 - R (>= 4.0)
-- dplyr (for data manipulation)
-- tidyr (for pivoting)
+- ggplot2 (for PCA plots)
+- tidyr (for pivot_wider in PCA calculation)
 
-No Olink-specific packages required.
+No Olink-specific packages required - all core calculations use base R functions.
