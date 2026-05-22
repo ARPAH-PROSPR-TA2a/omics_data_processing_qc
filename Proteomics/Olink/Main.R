@@ -138,7 +138,9 @@ metadata <- metadata[!duplicated(metadata[[SAMPLE_COL]]), ]
 pca_plots <- olink_pca_plots(pca_result,
                               metadata,
                               sample_col = SAMPLE_COL,
-                              color_vars = PCA_COLOR_VARS)
+                              color_vars = PCA_COLOR_VARS, 
+							  show_legend = TRUE)
+							  # If your batch labels are causing the legend to cover your plot, set show_legend = FALSE.
 
 cat("Generated", length(pca_plots$plots), "plots\n")
 

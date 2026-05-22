@@ -93,7 +93,7 @@ The Olink QC pipeline consists of three functions that can be run in sequence:
 - Separate function from calculation (cleaner modularity)
 - One plot per variable (avoids cluttered multi-panel plots)
 - Variance explained in axis labels (standard for PCA plots)
-- Legends are fully suppressed when a categorical color variable has >50 levels
+- Legends are fully suppressed when a categorical color variable has >50 levels OR when `show_legend = FALSE`
 
 **Privacy note:** If `mask_sample_ids = TRUE`, save `masked_scores` rather than `scores`.
 
@@ -117,6 +117,8 @@ pca <- olink_calculate_pca(df_pass)
 metadata <- df_pass[!duplicated(df_pass$SAMPLE_ID), 
                     c("SAMPLE_ID", "PlateID", "SampleQC")]
 plots <- olink_pca_plots(pca, metadata, color_vars = c("PlateID", "SampleQC"))
+
+If you have too many levels in the batch and the legend is obscuring the plot, set `show_legend = FALSE`
 
 # View plots
 plots$plots$PlateID
