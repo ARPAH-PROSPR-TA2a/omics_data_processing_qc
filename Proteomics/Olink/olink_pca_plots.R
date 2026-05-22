@@ -2,7 +2,8 @@ olink_pca_plots <- function(pca_result,
                             metadata,
                             sample_col = "SAMPLE_ID",
                             color_vars = c("PlateID", "SampleQC"),
-                            pcs = c(1, 2)) {
+                            pcs = c(1, 2),
+                            show_legend = TRUE) {
   
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
     stop("Install ggplot2 first: install.packages('ggplot2')")
@@ -62,11 +63,11 @@ olink_pca_plots <- function(pca_result,
       ggplot2::labs(title = paste0("PCA colored by ", cv)) +
       ggplot2::theme_classic()
     
-    if (omit_legend) {
-      p <- p + ggplot2::theme(legend.position = "none")
-    } else if (!is_numeric) {
-      p <- p + ggplot2::labs(color = cv)
-    }
+      if (!show_legend || omit_legend) {
+        p <- p + ggplot2::theme(legend.position = "none")
+      } else if (!is_numeric) {
+        p <- p + ggplot2::labs(color = cv)
+      }
     
     plots[[cv]] <- p
   }
