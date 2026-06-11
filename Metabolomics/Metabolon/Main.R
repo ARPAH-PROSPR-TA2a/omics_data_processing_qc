@@ -14,7 +14,17 @@ output_dir <- "output"
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(file.path(output_dir, "plots"), recursive = TRUE, showWarnings = FALSE)
 
+processed_metabolomics_data_dir_name <- "processed_metabolomics_data"
+processed_metabolomics_data_dir <- file.path(dirname(output_dir), processed_metabolomics_data_dir_name)
+dir.create(processed_metabolomics_data_dir, recursive = TRUE, showWarnings = FALSE)
+
 MASK_IDS <- TRUE
+
+# The full PCA RDS can contain participant-specific structure. Save it only when needed,
+# and keep it outside the standard shareable output directory.
+SAVE_FULL_PCA_OBJECT <- TRUE
+full_pca_output_dir_name <- "restricted_pca_output"
+full_pca_output_dir <- file.path(dirname(output_dir), full_pca_output_dir_name)
 
 # Column in phenotype_df that uniquely identifies each sample row
 SAMPLE_ID_COL <- "SampleID"
@@ -26,7 +36,6 @@ qc_result <- metabolon_sample_qc(
   cutoff = 3,
   prune = 0,
   target_sample_prop = 0.80,
-  output_dir = output_dir,
   mask_sample_ids = MASK_IDS
 )
 
@@ -44,8 +53,8 @@ if (qc_result$summary$pct_pass < 80) {
 analysis_mat <- qc_result$analysis_matrix
 analysis_pheno <- qc_result$analysis_pheno
 
-write.csv(analysis_pheno, file.path(output_dir, "metabolon_analysis_pheno.csv"), row.names = FALSE)
-saveRDS(analysis_mat, file.path(output_dir, "metabolon_analysis_matrix.rds"))
+write.csv(analysis_pheno, file.path(processed_metabolomics_data_dir, "metabolon_analysis_pheno.csv"), row.names = FALSE)
+saveRDS(analysis_mat, file.path(processed_metabolomics_data_dir, "metabolon_analysis_matrix.rds"))
 
 # STEP 2: Calculate PCA and save outputs
 pca_result <- metabolon_calculate_pca(
@@ -58,7 +67,11 @@ pca_result_to_save <- pca_result
 if (MASK_IDS && !is.null(pca_result$masked_scores)) {
   pca_result_to_save$scores <- pca_result$masked_scores
 }
-saveRDS(pca_result_to_save, file.path(output_dir, "metabolon_pca_result.rds"))
+
+if (SAVE_FULL_PCA_OBJECT) {
+  dir.create(full_pca_output_dir, recursive = TRUE, showWarnings = FALSE)
+  saveRDS(pca_result_to_save, file.path(full_pca_output_dir, "metabolon_pca_result.rds"))
+}
 write.csv(
   data.frame(
     PC = paste0("PC", seq_along(pca_result$variance_explained)),

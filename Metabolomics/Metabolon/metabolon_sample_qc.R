@@ -5,7 +5,6 @@ metabolon_sample_qc <- function(phenotype_df,
                                 cutoff = 3,
                                 prune = 0,
                                 target_sample_prop = 0.80,
-                                output_dir = "output",
                                 mask_sample_ids = FALSE,
                                 verbose = TRUE) {
   if (!is.data.frame(phenotype_df)) stop("phenotype_df must be a data.frame")
@@ -168,7 +167,6 @@ metabolon_sample_qc <- function(phenotype_df,
     removed_samples = removed_samples,
     analysis_sample_ids = sample_stats$sample_id[!sample_stats$any_fail],
     analysis_matrix = X,
-    analysis_pheno = pheno_matched,
-    qc_summary_file = file.path(output_dir, "metabolon_sample_qc_summary.csv")
+    analysis_pheno = pheno_matched
   )
 }
