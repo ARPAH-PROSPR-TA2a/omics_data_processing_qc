@@ -274,6 +274,7 @@ Standard outputs are written to `output_dir`:
 output/
 ├── metabolon_sample_qc_summary.csv        # QC summary statistics
 ├── metabolon_per_sample_masked.csv        # Per-sample QC results when MASK_IDS = TRUE
+├── metabolon_pca_summary.csv              # PCA input/filtering summary
 ├── metabolon_variance_explained.csv       # Variance explained per PC
 ├── metabolon_pca_loadings_masked.csv      # Metabolite loadings
 ├── metabolon_pca_scores_masked.csv        # PCA scores, masked when MASK_IDS = TRUE
@@ -285,6 +286,14 @@ output/
 ```
 
 When `MASK_IDS = FALSE`, filenames that include `_masked` are written without `_masked`.
+
+`metabolon_pca_summary.csv` contains one row with:
+
+- `n_metabolites`: Number of metabolites used after PCA filtering
+- `n_metabolites_total`: Number of metabolites before PCA filtering
+- `n_samples`: Number of samples used in PCA
+- `metabolites_removed`: Number of metabolites removed due to missingness
+- `missingness_threshold_used`: Missingness threshold applied before PCA
 
 Processed metabolomics data are written to the sibling folder controlled by `processed_metabolomics_data_dir_name`:
 

@@ -22,7 +22,7 @@ MASK_IDS <- TRUE
 
 # The full PCA RDS can contain participant-specific structure. Save it only when needed,
 # and keep it outside the standard shareable output directory.
-SAVE_FULL_PCA_OBJECT <- TRUE
+SAVE_FULL_PCA_OBJECT <- FALSE
 full_pca_output_dir_name <- "restricted_pca_output"
 full_pca_output_dir <- file.path(dirname(output_dir), full_pca_output_dir_name)
 
@@ -62,6 +62,16 @@ pca_result <- metabolon_calculate_pca(
   log2_transform = FALSE,
   mask_sample_ids = MASK_IDS
 )
+
+pca_summary <- data.frame(
+  n_metabolites = pca_result$n_metabolites,
+  n_metabolites_total = pca_result$n_metabolites_total,
+  n_samples = pca_result$n_samples,
+  metabolites_removed = pca_result$metabolites_removed,
+  missingness_threshold_used = pca_result$missingness_threshold_used,
+  stringsAsFactors = FALSE
+)
+write.csv(pca_summary, file.path(output_dir, "metabolon_pca_summary.csv"), row.names = FALSE)
 
 pca_result_to_save <- pca_result
 if (MASK_IDS && !is.null(pca_result$masked_scores)) {
