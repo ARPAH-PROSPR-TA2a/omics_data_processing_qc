@@ -5,7 +5,6 @@ olink_sample_qc <- function(df,
                              assay_keep = "assay",
                              cutoff = 3,
                              max_prune = 0,
-                             output_dir = "output",
                              mask_sample_ids = FALSE) {
   
   if (!is.data.frame(df)) {
