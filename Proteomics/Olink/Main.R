@@ -28,6 +28,12 @@ output_dir <- "output"
 # Privacy settings (set to TRUE to mask sample IDs)
 MASK_IDS <- TRUE
 
+# Full PCA object settings
+# The full PCA object can contain participant-specific structure, so it is
+# saved outside the standard QC output folder when requested.
+SAVE_FULL_PCA_OBJECT <- TRUE
+full_pca_output_dir_name <- "restricted_pca_output"
+
 # Column names (adjust if your data uses different names)
 SAMPLE_COL <- "SAMPLE_ID"
 PLATE_COL <- "PlateID"
@@ -109,11 +115,21 @@ cat("Variance explained by PC1:", round(pca_result$variance_explained[1] * 100, 
 cat("Variance explained by PC2:", round(pca_result$variance_explained[2] * 100, 1), "%\n")
 
 # Save PCA outputs
-pca_result_to_save <- pca_result
-if (MASK_IDS && !is.null(pca_result$masked_scores)) {
-  pca_result_to_save$scores <- pca_result$masked_scores
+pca_summary <- data.frame(
+  n_proteins = pca_result$n_proteins,
+  n_proteins_total = pca_result$n_proteins_total,
+  n_samples = pca_result$n_samples,
+  proteins_removed = pca_result$proteins_removed
+)
+write.csv(pca_summary,
+          file.path(output_dir, "olink_pca_summary.csv"),
+          row.names = FALSE)
+
+if (SAVE_FULL_PCA_OBJECT) {
+  full_pca_output_dir <- file.path(dirname(output_dir), full_pca_output_dir_name)
+  dir.create(full_pca_output_dir, recursive = TRUE, showWarnings = FALSE)
+  saveRDS(pca_result, file.path(full_pca_output_dir, "olink_pca_result.rds"))
 }
-saveRDS(pca_result_to_save, file.path(output_dir, "pca_result.rds"))
 
 write.csv(data.frame(
   PC = paste0("PC", seq_along(pca_result$variance_explained)),
@@ -167,10 +183,16 @@ write.csv(scores_to_save,
 
 cat("\n=== Pipeline Complete ===\n")
 cat("Output directory:", output_dir, "\n")
+if (SAVE_FULL_PCA_OBJECT) {
+  cat("Full PCA object directory:", full_pca_output_dir, "\n")
+}
 cat("Results saved to:\n")
 cat("  - sample_qc_per_sample.csv\n")
-cat("  - pca_result.rds\n")
+cat("  - olink_pca_summary.csv\n")
 cat("  - variance_explained.csv\n")
 cat("  - pca_loadings.csv\n")
 cat("  - pca_scores.csv\n")
 cat("  - plots/\n")
+if (SAVE_FULL_PCA_OBJECT) {
+  cat("  - ", file.path(full_pca_output_dir_name, "olink_pca_result.rds"), "\n", sep = "")
+}

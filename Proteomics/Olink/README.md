@@ -160,6 +160,29 @@ result <- olink_pca_plots(pca_result,
 
 See `Main.R` for a complete example of running all QC steps in sequence.
 
+Key user-controlled settings in `Main.R`:
+
+```r
+output_dir <- "output"
+MASK_IDS <- TRUE
+SAVE_FULL_PCA_OBJECT <- TRUE
+full_pca_output_dir_name <- "restricted_pca_output"
+SAMPLE_COL <- "SAMPLE_ID"
+```
+
+**Standard output directory:** `output_dir` controls where shareable CSV files and plots are saved.
+
+**Full PCA object directory:** When `SAVE_FULL_PCA_OBJECT = TRUE`, `olink_pca_result.rds` is saved to a sibling folder next to `output_dir`. The sibling folder name is controlled by `full_pca_output_dir_name`.
+
+For example, with the defaults above:
+
+```
+output/
+restricted_pca_output/
+```
+
+The full PCA object can contain participant-specific PCA structure through the underlying `prcomp` object. Set `SAVE_FULL_PCA_OBJECT = FALSE` when collaborators should receive only the standard shareable outputs.
+
 ## Output Files
 
 When using the save functions, outputs are organized as:
@@ -168,7 +191,7 @@ When using the save functions, outputs are organized as:
 output/
 ├── olink_sample_qc_summary.csv     # QC summary statistics
 ├── sample_qc_per_sample.csv        # Per-sample QC results
-├── pca_result.rds                # Full PCA result object (masked if requested)
+├── olink_pca_summary.csv         # Tabular PCA summary counts
 ├── variance_explained.csv        # Variance explained per PC
 ├── pca_loadings.csv              # Protein loadings
 ├── pca_scores.csv               # Sample scores (masked if requested)
@@ -179,9 +202,24 @@ output/
 
 When `MASK_IDS = TRUE` in Main.R, CSV filenames will include `_masked`.
 
+`olink_pca_summary.csv` contains one row with:
+
+```
+n_proteins,n_proteins_total,n_samples,proteins_removed
+```
+
+Optional restricted output when `SAVE_FULL_PCA_OBJECT = TRUE`:
+
+```
+restricted_pca_output/
+└── olink_pca_result.rds          # Full PCA result object, including pca_object
+```
+
 ## Privacy
 
 Set `MASK_IDS = TRUE` in `Main.R` to mask sample IDs when saving CSV files. The functions themselves keep real IDs internally to enable merging with metadata. Masking is applied only when writing output files.
+
+The full PCA object is more sensitive than the standard CSV outputs because it includes the underlying PCA object and sample-level structure. Use `SAVE_FULL_PCA_OBJECT = FALSE` unless the collaborator specifically needs the full object. If it is needed, set `SAVE_FULL_PCA_OBJECT = TRUE` and choose an appropriate restricted folder name with `full_pca_output_dir_name`.
 
 ## Contact
 
