@@ -69,6 +69,18 @@ pca_result <- metabolon_calculate_pca(
   mask_sample_ids = MASK_IDS
 )
 
+
+pca_summary <- data.frame(
+  n_metabolites = pca_result$n_metabolites,
+  n_metabolites_total = pca_result$n_metabolites_total,
+  n_samples = pca_result$n_samples,
+  metabolites_removed = pca_result$metabolites_removed,
+  missingness_threshold_used = pca_result$missingness_threshold_used,
+  stringsAsFactors = FALSE
+)
+write.csv(pca_summary, file.path(output_dir, "metabolon_pca_summary.csv"), row.names = FALSE)
+
+
 pca_result_to_save <- pca_result
 if (MASK_IDS && !is.null(pca_result$masked_scores)) {
   pca_result_to_save$scores <- pca_result$masked_scores
