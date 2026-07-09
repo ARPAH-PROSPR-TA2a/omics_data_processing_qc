@@ -1,0 +1,7 @@
+output/
+restricted_objects/
+.DS_Store
+*.RData
+*.Rdata
+*.rds
+*.idat
