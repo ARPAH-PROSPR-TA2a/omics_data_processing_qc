@@ -8,10 +8,10 @@
 # ==============================================================================
 
 # Load functions
-source("Code/SomaScan/somascan_lod_qc.R")
-source("Code/SomaScan/somascan_norm_qc.R")
-source("Code/SomaScan/somascan_techrep_cor.R")
-source("Code/SomaScan/somascan_pca_plots.R")
+source("../../ARPAH_Misc/ARPAH-PROSPR-TA2a/omics_data_processing_qc/Proteomics/SomaScan/somascan_lod_qc.R")
+source("../../ARPAH_Misc/ARPAH-PROSPR-TA2a/omics_data_processing_qc/Proteomics/SomaScan/somascan_norm_qc.R")
+source("../../ARPAH_Misc/ARPAH-PROSPR-TA2a/omics_data_processing_qc/Proteomics/SomaScan/somascan_techrep_cor.R")
+source("../../ARPAH_Misc/ARPAH-PROSPR-TA2a/omics_data_processing_qc/Proteomics/SomaScan/somascan_pca_plots.R")
 
 # Load data (replace with your ADAT file)
 # dat <- read.table("your_data.adat", header = TRUE, sep = "\t", stringsAsFactors = FALSE)
@@ -21,6 +21,7 @@ source("Code/SomaScan/somascan_pca_plots.R")
 # For testing, use example data:
 # install.packages(SomaDataIO)
 library(SomaDataIO)
+library(ggplot2)
 dat <- read_adat("Data/0_Data/Data_and_Script_for_Analysis/L0123001614_L0125003207_v5.0_EDTAPlasma.bridge.hybNorm.medNormInt.plateScale.leakDetection.calibrate.anmlQC.qcCheck.anmlSMP.adat")
 
 # ==============================================================================
@@ -31,7 +32,7 @@ dat <- read_adat("Data/0_Data/Data_and_Script_for_Analysis/L0123001614_L01250032
 output_dir <- "Output/SomaScan_CPR_QC"
 
 # Privacy settings (set to TRUE to mask sample IDs)
-MASK_IDS <- FALSE
+MASK_IDS <- TRUE
 
 # Run technical replicate correlation (set to FALSE if dataset has no technical replicates)
 RUN_TECHREP <- TRUE
@@ -96,7 +97,7 @@ write.csv(lod_result$per_sample,
 passing_indices <- which(lod_result$per_sample$sample_pass)
 
 # ==============================================================================
-# STEP 2: Filter to passing samples
+# Filter to passing samples
 # ==============================================================================
 
 cat("\n=== Filtering to passing samples ===\n")
@@ -107,7 +108,7 @@ cat("Samples after filtering:", nrow(dat_filtered), "\n")
 
 
 # ==============================================================================
-# STEP 3: Normalization QC
+# STEP 2: Normalization QC
 # ==============================================================================
 
 cat("\n=== Step 2: Normalization QC ===\n")
@@ -143,42 +144,42 @@ write.csv(norm_result$per_sample,
           row.names = FALSE)
 
 # ==============================================================================
-# STEP 4: Technical Replicate Correlations
+# STEP 3: Technical Replicate Correlations
 # ==============================================================================
 
+# Load correct identifiers needed for CALERIE (not in the assay data)
+xwalk <-readr::read_csv("Output/Data/CALERIE_clinical_w_omics_crosswalks.csv") %>% select(DEID, proteomics_barcode)
+
+dat_filtered <-left_join(dat_filtered %>% rownames_to_column(var = 'row_names'), xwalk, by = c('row_names' = 'proteomics_barcode'))
+
+
 if (RUN_TECHREP) {
-
+  
   cat("\n=== Step 3: Technical Replicate Correlations ===\n")
-
-  techrep_result <- somascan_techrep_cor(dat,
-                                         replicate_ids = NULL,
+  
+  techrep_result <- somascan_techrep_cor(dat_filtered,
+                                         subject_id_col = 'DEID',
+                                         time_col = TIME_COL,
                                          use_qc = TRUE,
-                                         sample_type_col = "SampleType",
-                                         qc_label = "QC",
-                                         sample_id_col = "SampleId",
-                                         plate_id_col = "PlateId",
-                                         include_only_baseline = TRUE,
-                                         time_col = "SubjectID",
-                                         baseline_values = NA,
-                                         mask_sample_ids = FALSE)
-
+                                         mask_sample_ids = MASK_IDS)
+  
   cat("Sample IDs with replicates:", techrep_result$n_ids_with_reps, "\n")
-
+  
   if (nrow(techrep_result$results) > 0) {
     cat("Mean correlation:", round(mean(techrep_result$results$r, na.rm = TRUE), 3), "\n")
-
+    
     write.csv(data.frame(
       n_rows = techrep_result$n_rows_used,
       n_ids_with_reps = techrep_result$n_ids_with_reps,
       mean_r = mean(techrep_result$results$r, na.rm = TRUE),
       median_r = median(techrep_result$results$r, na.rm = TRUE)
     ), file.path(output_dir, "03_techrep", "techrep_summary.csv"), row.names = FALSE)
-
+    
     write.csv(techrep_result$results,
               file.path(output_dir, "03_techrep", paste0("pairwise_correlations", lod_suffix, ".csv")),
               row.names = FALSE)
   }
-
+  
 } else {
   cat("\n=== Step 3: Technical Replicate Correlations ===\n")
   cat("Skipped (RUN_TECHREP = FALSE)\n")
@@ -186,7 +187,7 @@ if (RUN_TECHREP) {
 
 
 # ==============================================================================
-# STEP 5: PCA Plots
+# STEP 4: PCA Plots
 # ==============================================================================
 
 cat("\n=== Step 4: PCA Plots ===\n")

@@ -59,14 +59,18 @@ $n_pruned: count of removed samples
 **Purpose:** Measure technical reproducibility using replicate wells.
 
 **Method:**
-1. Optionally filter to baseline timepoint only
-2. Identify rows with same SampleId
+1. Require user-specified subject and timepoint columns
+2. Identify rows with the same subject and same timepoint
 3. Compute pairwise Pearson correlations on log2-transformed data
 4. Track whether replicates are on same or different plates
 
-**Baseline filtering:**
-- Default: `include_only_baseline = TRUE` requires both `time_col` and `baseline_values`
-- If you have single timepoint data, set `include_only_baseline = FALSE`
+**Subject/timepoint grouping:**
+- `subject_id_col` must be specified by the user because the correct column varies by dataset
+- `time_col` must be specified by the user because visit/follow-up naming varies by dataset
+- Replicate comparisons are only made within the same subject and same timepoint
+- Different timepoints for the same subject are never compared
+- `replicate_ids`, if supplied, are subject IDs
+- When `mask_sample_ids = TRUE`, output uses masked `SubjectId` plus `Timepoint` and does not expose raw `SampleId`
 
 **Key decisions:**
 - Uses log2 transformation (standard for SomaScan)
@@ -113,8 +117,8 @@ norm <- somascan_norm_qc(dat_passed)
 
 # Step 4: Technical replicate correlations
 techrep <- somascan_techrep_cor(dat_passed,
-                                time_col = "Followup",
-                                baseline_values = c(0, "Baseline"))
+                                subject_id_col = "SubjectID",
+                                time_col = "Followup")
 
 # Step 5: PCA
 pca <- somascan_pca_plots(dat_passed,

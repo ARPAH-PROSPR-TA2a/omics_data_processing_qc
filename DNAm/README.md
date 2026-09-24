@@ -234,6 +234,38 @@ SAVE_RGSET <- FALSE
 SAVE_CONTROL_PCA_OBJECT <- TRUE
 ```
 
+## CALERIE Raw IDAT QC Shortcut
+
+For the CALERIE raw IDAT QC workflow, use the focused script:
+
+```bash
+Rscript CALERIE_raw_idat_qc.R
+```
+
+Edit only these lines at the top of `CALERIE_raw_idat_qc.R`:
+
+```r
+sample_sheet_file <- "path/to/CALERIE_samplesheet.csv"
+idat_dir <- "path/to/IDATs"
+output_dir <- "CALERIE_raw_idat_qc_output"
+chunk_size <- 48
+```
+
+The script creates `Barcode` using:
+
+```r
+Barcode = paste(Slide, Array, sep = "_")
+```
+
+If the sample sheet already contains `Barcode` or `barcode`, that existing column is used instead. The expected IDAT filenames are:
+
+```text
+Barcode_Red.idat
+Barcode_Grn.idat
+```
+
+The CALERIE shortcut loads one chunk of samples at a time, extracts control-probe values, bead QC, and detection p-value QC, removes the chunk RGset from memory, and runs control-probe PCA after all chunks are complete. This is the recommended script for cloud runs with hundreds of samples.
+
 ---
 
 ## Output Files

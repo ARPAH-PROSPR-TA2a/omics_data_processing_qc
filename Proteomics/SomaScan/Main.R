@@ -36,9 +36,10 @@ MASK_IDS <- TRUE
 # Run technical replicate correlation (set to FALSE if dataset has no technical replicates)
 RUN_TECHREP <- TRUE
 
-# Timepoint column for baseline filtering (set NULL if not applicable)
-TIME_COL <- "Followup"        # Column name containing timepoint info
-BASELINE_VALUES <- c(0, "Baseline", "BL")  # Values representing baseline
+# Subject/timepoint columns for technical replicate comparisons.
+# These must be edited to match each study's metadata.
+SUBJECT_ID_COL <- "SubjectID"
+TIME_COL <- "Followup"
 
 # PCA coloring variables
 PCA_COLOR_VARS <- c("PlateId", "SlideId", "Sex", "Age", "SampleGroup")
@@ -145,11 +146,10 @@ if (RUN_TECHREP) {
   cat("\n=== Step 3: Technical Replicate Correlations ===\n")
   
   techrep_result <- somascan_techrep_cor(dat_filtered,
-                                           use_qc = TRUE,
-                                           include_only_baseline = TRUE,
+                                           subject_id_col = SUBJECT_ID_COL,
                                            time_col = TIME_COL,
-                                           baseline_values = BASELINE_VALUES,
-                                           mask_sample_ids = MASK_IDS)
+                                            use_qc = TRUE,
+                                            mask_sample_ids = MASK_IDS)
   
   cat("Sample IDs with replicates:", techrep_result$n_ids_with_reps, "\n")
   

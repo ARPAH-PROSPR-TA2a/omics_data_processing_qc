@@ -143,42 +143,39 @@ result <- somascan_norm_qc(dat,
 **Purpose:** Measure technical reproducibility using replicate wells.
 
 **Method:**
-1. Optionally filter to baseline timepoint only.
-2. Identify rows sharing the same `SampleId`.
+1. Require user-specified subject and timepoint columns.
+2. Identify replicate rows sharing the same subject and same timepoint.
 3. Compute pairwise Pearson correlations on log2-transformed data.
 4. Track whether replicates are on the same or different plates.
 
 > **Key decisions:** Log2 transformation and Pearson correlation are standard for SomaScan. Cross-plate vs. within-plate variation is tracked explicitly.
 
+> **Privacy and timepoint note:** Technical replicate output uses `SubjectId` and `Timepoint`, not raw `SampleId`. When `mask_sample_ids = TRUE`, `SubjectId` is replaced with generic IDs (e.g., `Sample_1`). Replicates are only compared within the same subject and same timepoint; different follow-up visits for the same subject are never compared.
+
 ```r
 result <- somascan_techrep_cor(dat,
+                               subject_id_col = "SubjectID",
+                               time_col = "Followup",
                                replicate_ids = NULL,
                                use_qc = TRUE,
                                sample_type_col = "SampleType",
                                qc_label = "QC",
-                               sample_id_col = "SampleId",
                                plate_id_col = "PlateId",
-                               include_only_baseline = TRUE,
-                               time_col = "Followup",
-                               baseline_values = c(0, "Baseline", "BL"),
-                               mask_sample_ids = FALSE)
+                               mask_sample_ids = TRUE)
 ```
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
+| `subject_id_col` | Column containing the subject/participant identifier | required |
+| `time_col` | Column containing visit/follow-up/timepoint information | required |
 | `use_qc` | Include QC wells in correlation analysis | `TRUE` |
-| `replicate_ids` | Optional vector of SampleIds to include (e.g., biological duplicates) | `NULL` |
-| `include_only_baseline` | Filter to baseline timepoint only | `TRUE` |
-| `time_col` | Column containing timepoint information | `"Followup"` |
-| `baseline_values` | Values in `time_col` indicating baseline | `c(0, "Baseline", "BL")` |
-| `mask_sample_ids` | If TRUE, replaces SampleIds with generic labels | `FALSE` |
-
-> **Note:** If you have single-timepoint data, set `include_only_baseline = FALSE`.
+| `replicate_ids` | Optional vector of subject IDs to include | `NULL` |
+| `mask_sample_ids` | If TRUE, replaces subject IDs with generic labels | `TRUE` |
 
 **Returns:**
 - `n_rows_used`: Number of rows analyzed
-- `n_ids_with_reps`: Number of unique SampleIds with replicates
-- `results`: Pairwise correlations with plate information
+- `n_ids_with_reps`: Number of subject-timepoint groups with replicates
+- `results`: Pairwise correlations with masked/unmasked `SubjectId`, `Timepoint`, plate information, and `r`
 
 ---
 
@@ -238,8 +235,8 @@ norm <- somascan_norm_qc(dat_passed)
 
 # Step 4: Technical replicate correlations
 techrep <- somascan_techrep_cor(dat_passed,
-                                time_col = "Followup",
-                                baseline_values = c(0, "Baseline"))
+                                subject_id_col = "SubjectID",
+                                time_col = "Followup")
 
 # Step 5: PCA
 pca <- somascan_pca_plots(dat_passed,
