@@ -89,12 +89,13 @@ write.csv(lod_result$per_sample,
           row.names = FALSE)
 
 # ==============================================================================
-# Extract passing sample indices robustly (handles masked vs original IDs)
+# Extract passing sample indices
 # ==============================================================================
 
-# lod_result$per_sample rows correspond 1-to-1 with the input dat rows,
-# so we can use positional indexing regardless of whether IDs were masked.
-passing_indices <- which(lod_result$per_sample$sample_pass)
+# lod_result$row_pass is a logical vector aligned 1:1 with the input dat rows
+# (TRUE for Sample-type rows that pass LOD), so positional indexing is safe
+# regardless of Buffer/QC/Calibrator rows or ID masking.
+passing_indices <- which(lod_result$row_pass)
 
 # ==============================================================================
 # STEP 2: Filter to passing samples
@@ -148,21 +149,34 @@ if (RUN_TECHREP) {
   techrep_result <- somascan_techrep_cor(dat_filtered,
                                            subject_id_col = SUBJECT_ID_COL,
                                            time_col = TIME_COL,
-                                            use_qc = TRUE,
-                                            mask_sample_ids = MASK_IDS)
-  
+                                           use_qc = TRUE,
+                                           mask_sample_ids = MASK_IDS,
+                                           id_map = if (MASK_IDS) lod_result$id_map else NULL)
+
   cat("Sample IDs with replicates:", techrep_result$n_ids_with_reps, "\n")
-  
+  cat("Replicate rows:", techrep_result$n_replicate_rows, "in",
+      techrep_result$n_replicate_groups, "groups (",
+      techrep_result$n_replicate_pairs, "pairs)\n")
+
+  rep_suffix <- ifelse(MASK_IDS, "_masked", "")
+  write.csv(techrep_result$groups,
+            file.path(output_dir, "03_techrep", paste0("rep_groups", rep_suffix, ".csv")),
+            row.names = FALSE)
+
   if (nrow(techrep_result$results) > 0) {
     cat("Mean correlation:", round(mean(techrep_result$results$r, na.rm = TRUE), 3), "\n")
-    
+
     write.csv(data.frame(
-      n_rows = techrep_result$n_rows_used,
-      n_ids_with_reps = techrep_result$n_ids_with_reps,
-      mean_r = mean(techrep_result$results$r, na.rm = TRUE),
-      median_r = median(techrep_result$results$r, na.rm = TRUE)
+      metric = c("n_samples_analyzed", "n_replicate_groups", "n_replicate_rows",
+                 "n_replicate_pairs", "mean_r", "median_r"),
+      value = c(techrep_result$n_samples_analyzed,
+                techrep_result$n_replicate_groups,
+                techrep_result$n_replicate_rows,
+                techrep_result$n_replicate_pairs,
+                mean(techrep_result$results$r, na.rm = TRUE),
+                median(techrep_result$results$r, na.rm = TRUE))
     ), file.path(output_dir, "03_techrep", "techrep_summary.csv"), row.names = FALSE)
-    
+
     write.csv(techrep_result$results,
               file.path(output_dir, "03_techrep", paste0("pairwise_correlations", lod_suffix, ".csv")),
               row.names = FALSE)

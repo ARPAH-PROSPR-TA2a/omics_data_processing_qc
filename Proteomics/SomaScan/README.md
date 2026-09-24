@@ -96,12 +96,9 @@ result <- somascan_lod_qc(dat,
 - `n_samples_initial`, `n_samples_final`: Sample counts before/after
 - `n_pruned`: Number of samples removed
 - `per_sample`: Per-sample pass/fail data (`SampleId`, `proteins_pass_prop`, `sample_pass`)
+- `row_pass`: Logical vector aligned 1:1 with the input `dat` rows, marking Sample-type rows that pass LOD. Use `which(lod_result$row_pass)` to filter the ADAT safely (never positionally index into `per_sample`, which contains only Sample-type rows).
 - `lod_per_analyte`: Named vector of LOD values
-
-**Note:** If samples are pruned, extract passing IDs with:
-```r
-passed_sample_ids <- result$per_sample$SampleId[result$per_sample$sample_pass]
-```
+- `id_map`: Named vector mapping raw `SampleId` -> `Sample_#` (only when `mask_sample_ids = TRUE`). Pass this to `somascan_techrep_cor` so replicate-well labels agree with the LOD output.
 
 ---
 
@@ -143,14 +140,15 @@ result <- somascan_norm_qc(dat,
 **Purpose:** Measure technical reproducibility using replicate wells.
 
 **Method:**
-1. Require user-specified subject and timepoint columns.
-2. Identify replicate rows sharing the same subject and same timepoint.
+1. Require user-specified subject, timepoint, plate, and sample-ID columns.
+2. Identify replicate rows sharing the same subject and same timepoint (subject and timepoint values are trimmed before grouping so whitespace/label differences do not split pairs).
 3. Compute pairwise Pearson correlations on log2-transformed data.
 4. Track whether replicates are on the same or different plates.
+5. Report each replicate group (≥ 2 rows) in a separate `groups` table. Singletons (n = 1) are excluded entirely.
 
 > **Key decisions:** Log2 transformation and Pearson correlation are standard for SomaScan. Cross-plate vs. within-plate variation is tracked explicitly.
 
-> **Privacy and timepoint note:** Technical replicate output uses `SubjectId` and `Timepoint`, not raw `SampleId`. When `mask_sample_ids = TRUE`, `SubjectId` is replaced with generic IDs (e.g., `Sample_1`). Replicates are only compared within the same subject and same timepoint; different follow-up visits for the same subject are never compared.
+> **Privacy and timepoint note:** Replicates are only compared within the same subject and same timepoint; different follow-up visits for the same subject are never compared. The pairwise output lists both replicate wells (`Sample_i`, `Sample_j`) plus the `SubjectId`-`Timepoint` linkage. When `mask_sample_ids = TRUE`, member well IDs are masked with the **same** `Sample_#` scheme as the LOD step (pass `id_map = lod_result$id_map`) so labels are consistent across modules, while `SubjectId` is masked separately as `Subj_#` to avoid collisions.
 
 ```r
 result <- somascan_techrep_cor(dat,
@@ -161,7 +159,9 @@ result <- somascan_techrep_cor(dat,
                                sample_type_col = "SampleType",
                                qc_label = "QC",
                                plate_id_col = "PlateId",
-                               mask_sample_ids = TRUE)
+                               sample_id_col = "SampleId",
+                               mask_sample_ids = TRUE,
+                               id_map = lod_result$id_map)
 ```
 
 | Parameter | Description | Default |
@@ -170,12 +170,19 @@ result <- somascan_techrep_cor(dat,
 | `time_col` | Column containing visit/follow-up/timepoint information | required |
 | `use_qc` | Include QC wells in correlation analysis | `TRUE` |
 | `replicate_ids` | Optional vector of subject IDs to include | `NULL` |
-| `mask_sample_ids` | If TRUE, replaces subject IDs with generic labels | `TRUE` |
+| `sample_id_col` | Column containing the well/barcode IDs of the two replicates | `"SampleId"` |
+| `id_map` | Mapping from raw sample ID to masked `Sample_#` (from the LOD step) | `NULL` |
+| `mask_sample_ids` | If TRUE, masks subject IDs (`Subj_#`) and well IDs (`Sample_#`) | `TRUE` |
 
 **Returns:**
-- `n_rows_used`: Number of rows analyzed
-- `n_ids_with_reps`: Number of subject-timepoint groups with replicates
-- `results`: Pairwise correlations with masked/unmasked `SubjectId`, `Timepoint`, plate information, and `r`
+- `n_samples_analyzed`: Number of rows fed into the step (all rows with non-NA subject/timepoint) — *not* the number of replicate rows
+- `n_replicate_groups`: Number of subject-timepoint groups with ≥ 2 rows
+- `n_replicate_rows`: Total number of replicate rows (sum of group sizes, e.g., 2 groups × 2 = 4)
+- `n_replicate_pairs`: Number of pairwise correlations computed (`nrow(results)`)
+- `groups`: Matched-pair groups only (`SubjectId`, `Timepoint`, `n_members`, member `SampleIds`). Singletons (n = 1) are excluded — a group appears here only if it has ≥ 2 rows.
+- `results`: Pairwise correlations with masked `Sample_i`/`Sample_j`, `SubjectId`, `Timepoint`, plate info, `same_plate`, and `r`
+
+> **Note on old `n_rows`:** the previous summary wrote `n_rows = n_samples_analyzed`, which is the total rows analyzed, not replicate rows. Use `n_replicate_rows` for that.
 
 ---
 
@@ -225,10 +232,9 @@ See `Main.R` for a complete working example. The recommended sequence is:
 ```r
 # Step 1: LOD QC
 lod <- somascan_lod_qc(dat)
-passed_ids <- lod$per_sample$SampleId[lod$per_sample$sample_pass]
 
-# Step 2: Filter to passing samples
-dat_passed <- dat[dat$SampleId %in% passed_ids, ]
+# Step 2: Filter to passing samples (row_pass is aligned 1:1 with dat rows)
+dat_passed <- dat[which(lod$row_pass), ]
 
 # Step 3: Normalization QC
 norm <- somascan_norm_qc(dat_passed)
@@ -260,6 +266,7 @@ output/
 │   └── per_sample_norm.csv
 ├── 03_techrep/
 │   ├── techrep_summary.csv
+│   ├── rep_groups.csv
 │   └── pairwise_correlations.csv
 └── 04_pca/
     ├── pca_scores.csv
@@ -273,7 +280,7 @@ output/
 
 ## Privacy
 
-Set `mask_sample_ids = TRUE` in any function to prevent individual-level sample identifiers from appearing in outputs. All `SampleId` values will be replaced with generic labels (e.g., `"Sample_1"`, `"Sample_2"`, etc.).
+Set `mask_sample_ids = TRUE` in any function to prevent individual-level identifiers from appearing in outputs. Sample/well `SampleId` values are replaced with generic labels (e.g., `"Sample_1"`, `"Sample_2"`, etc.). In the technical-replicate step, replicate well IDs reuse the LOD `Sample_#` mapping, and subject IDs are masked separately as `"Subj_1"`, `"Subj_2"`, etc., so the two schemes never collide.
 
 ---
 

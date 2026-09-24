@@ -32,10 +32,13 @@ The SomaScan QC pipeline consists of four independent functions that can be run 
 
 **Output structure:**
 ```
-$per_sample: data.frame with SampleId, proteins_pass_prop, sample_pass
+$per_sample: data.frame with SampleId, proteins_pass_prop, sample_pass (Sample-type rows only)
+$row_pass: logical vector aligned 1:1 with the input dat rows (Sample-type rows passing LOD)
 $lod_per_analyte: named vector of LOD values
 $n_pruned: count of removed samples
+$id_map: named vector raw SampleId -> Sample_# (when mask_sample_ids = TRUE)
 ```
+> **Filtering note:** `per_sample` contains only Sample-type rows, so its indices do NOT map to rows of the full ADAT (which also has Buffer/QC/Calibrator rows). Always filter with `dat[which(lod$row_pass), , drop = FALSE]`. Using `which(lod$per_sample$sample_pass)` as positional indices into `dat` silently drops dat rows past the last sample row — the historical cause of "missing" replicate pairs (e.g. a replicate at dat row 869 vanishing because only rows 1..858 were selected).
 
 ---
 
@@ -59,8 +62,8 @@ $n_pruned: count of removed samples
 **Purpose:** Measure technical reproducibility using replicate wells.
 
 **Method:**
-1. Require user-specified subject and timepoint columns
-2. Identify rows with the same subject and same timepoint
+1. Require user-specified subject, timepoint, plate, and sample-ID columns
+2. Trim subject/timepoint values and identify rows with the same subject and same timepoint
 3. Compute pairwise Pearson correlations on log2-transformed data
 4. Track whether replicates are on same or different plates
 
@@ -70,7 +73,20 @@ $n_pruned: count of removed samples
 - Replicate comparisons are only made within the same subject and same timepoint
 - Different timepoints for the same subject are never compared
 - `replicate_ids`, if supplied, are subject IDs
-- When `mask_sample_ids = TRUE`, output uses masked `SubjectId` plus `Timepoint` and does not expose raw `SampleId`
+- Subject and timepoint values are `trimws()`ed before grouping so whitespace/label mismatches do not silently split replicate pairs
+
+**Outputs:**
+- `n_samples_analyzed` = all rows with non-NA subject/timepoint fed into the step (this was formerly mislabeled `n_rows`); *not* the replicate row count
+- `n_replicate_groups` (alias `n_ids_with_reps`) = subject-timepoint groups with ≥ 2 rows
+- `n_replicate_rows` = sum of sizes of those groups (e.g. 2 groups × 2 = 4)
+- `n_replicate_pairs` = `nrow(results)`
+- `groups` = matched-pair groups only (`SubjectId`, `Timepoint`, `n_members`, member `SampleIds`); singletons (n = 1) are excluded entirely
+- `results` = one row per pair with `Sample_i`, `Sample_j`, `SubjectId`, `Timepoint`, `PlateId_i`, `PlateId_j`, `same_plate`, `r`
+
+**Masking:**
+- When `mask_sample_ids = TRUE`, replicate well IDs (Sample_i/j and group members) are mapped through the LOD step's `id_map` (pass `id_map = lod_result$id_map`) so `Sample_#` labels are identical across modules
+- Subject IDs are masked with a separate `Subj_#` prefix so a subject is never labeled `Sample_#`
+- If `id_map` is not supplied, a local per-sample map is generated inside the function
 
 **Key decisions:**
 - Uses log2 transformation (standard for SomaScan)
@@ -107,10 +123,9 @@ To chain functions together:
 ```r
 # Step 1: LOD QC
 lod <- somascan_lod_qc(dat)
-passed_ids <- lod$per_sample$SampleId[lod$per_sample$sample_pass]
 
-# Step 2: Filter to passing samples
-dat_passed <- dat[dat$SampleId %in% passed_ids, ]
+# Step 2: Filter to passing samples (row_pass is aligned 1:1 with dat rows)
+dat_passed <- dat[which(lod$row_pass), ]
 
 # Step 3: Normalization QC
 norm <- somascan_norm_qc(dat_passed)

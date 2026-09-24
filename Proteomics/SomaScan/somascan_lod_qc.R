@@ -104,12 +104,21 @@ somascan_lod_qc <- function(dat,
   )
   
   # Apply masking if requested
+  id_map <- NULL
   if (mask_sample_ids) {
     unique_ids <- unique(out_samples$SampleId)
     id_map <- setNames(paste0("Sample_", seq_along(unique_ids)), unique_ids)
     out_samples$SampleId <- id_map[out_samples$SampleId]
   }
-  
+
+  # row_pass: logical vector aligned 1:1 with the input `dat` rows, marking the
+  # rows that are Sample-type AND pass LOD. Built from SampleId matching (not
+  # positional indices) so it is correct even though `dat` also contains
+  # Buffer/QC/Calibrator rows (and regardless of masking).
+  pass_ids <- as.character(samples[[sample_id_col]][res$sample_pass])
+  row_pass <- rep(FALSE, nrow(dat))
+  row_pass[as.character(dat[[sample_id_col]]) %in% pass_ids] <- TRUE
+
   list(
     pct_samples_with_ge80pct_proteins = res$pct_samples_passing,
     target_sample_prop = target_sample_prop,
@@ -121,6 +130,8 @@ somascan_lod_qc <- function(dat,
     n_pruned = length(removed),
     pruned_sample_ids = removed,
     per_sample = out_samples,
-    lod_per_analyte = lod
+    row_pass = row_pass,
+    lod_per_analyte = lod,
+    id_map = id_map
   )
 }
