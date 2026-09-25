@@ -33,7 +33,14 @@ detection_p_threshold <- 0.05
 control_pca_variance_threshold <- 0.90
 
 # Save each chunk RGset? Usually FALSE. Set TRUE only if you explicitly need RDS objects.
-save_chunk_rgsets <- FALSE
+save_chunk_rgsets <- tolower(Sys.getenv("CALERIE_SAVE_CHUNK_RGSETS", "FALSE")) %in% c("true", "t", "1", "yes", "y")
+
+# Optional outputs that can carry sample-level metadata. Both default to FALSE so
+# collaborator-facing outputs only contain barcodes and QC metrics.
+# write_raw_sample_manifest also controls missing_idats.csv.
+# save_control_pca_object controls restricted_objects/control_probe_pca.rds.
+write_raw_sample_manifest <- tolower(Sys.getenv("CALERIE_WRITE_RAW_SAMPLE_MANIFEST", "FALSE")) %in% c("true", "t", "1", "yes", "y")
+save_control_pca_object <- tolower(Sys.getenv("CALERIE_SAVE_CONTROL_PCA_OBJECT", "FALSE")) %in% c("true", "t", "1", "yes", "y")
 
 # ==============================================================================
 # PACKAGE CHECKS
@@ -288,25 +295,31 @@ cat("=== CALERIE Raw IDAT QC ===\n")
 cat("Sample sheet:", sample_sheet_file, "\n")
 cat("IDAT dir:", idat_dir, "\n")
 cat("Output dir:", output_dir, "\n")
-cat("Chunk size:", chunk_size, "\n\n")
+cat("Chunk size:", chunk_size, "\n")
+cat("Write raw sample manifest:", write_raw_sample_manifest, "\n")
+cat("Save control PCA object:", save_control_pca_object, "\n\n")
 
 samples <- read_calerie_sample_sheet(sample_sheet_file)
 samples <- add_calerie_barcode(samples)
 samples <- validate_idat_files(samples, idat_dir)
 
-utils::write.csv(
-  samples,
-  file.path(output_dir, "01_manifest_rgset", "raw_sample_manifest_validated.csv"),
-  row.names = FALSE
-)
-
-if (!all(samples$idat_pair_exists)) {
-  missing_idats <- samples[!samples$idat_pair_exists, , drop = FALSE]
+if (write_raw_sample_manifest) {
   utils::write.csv(
-    missing_idats,
-    file.path(output_dir, "01_manifest_rgset", "missing_idats.csv"),
+    samples,
+    file.path(output_dir, "01_manifest_rgset", "raw_sample_manifest_validated.csv"),
     row.names = FALSE
   )
+}
+
+if (!all(samples$idat_pair_exists)) {
+  if (write_raw_sample_manifest) {
+    missing_idats <- samples[!samples$idat_pair_exists, , drop = FALSE]
+    utils::write.csv(
+      missing_idats,
+      file.path(output_dir, "01_manifest_rgset", "missing_idats.csv"),
+      row.names = FALSE
+    )
+  }
   stop("Missing IDAT files detected. See 01_manifest_rgset/missing_idats.csv", call. = FALSE)
 }
 
@@ -352,9 +365,6 @@ cat("\n=== Combining QC Results ===\n")
 
 bead_qc <- do.call(rbind, bead_qc_all)
 detection_qc <- do.call(rbind, detection_qc_all)
-
-bead_qc <- merge(samples, bead_qc, by = "Barcode", all.x = TRUE, sort = FALSE)
-detection_qc <- merge(samples, detection_qc, by = "Barcode", all.x = TRUE, sort = FALSE)
 
 bead_summary <- data.frame(
   metric = c(
@@ -406,7 +416,9 @@ utils::write.csv(
   file.path(output_dir, "02_control_probe_pca", "control_probe_pca_summary.csv"),
   row.names = FALSE
 )
-saveRDS(control_pca$pca, file.path(output_dir, "restricted_objects", "control_probe_pca.rds"))
+if (save_control_pca_object) {
+  saveRDS(control_pca$pca, file.path(output_dir, "restricted_objects", "control_probe_pca.rds"))
+}
 
 utils::write.csv(
   bead_qc,

@@ -64,7 +64,9 @@ RUN_UNIFORMITY_CHECK <- TRUE
 # Privacy and restricted output settings
 MASK_IDS <- FALSE
 SAVE_RGSET <- FALSE
-SAVE_CONTROL_PCA_OBJECT <- TRUE
+SAVE_CONTROL_PCA_OBJECT <- FALSE
+WRITE_RAW_SAMPLE_MANIFEST <- FALSE
+INCLUDE_REPLICATE_GROUP <- FALSE
 
 # ==============================================================================
 # CREATE OUTPUT DIRECTORIES
@@ -97,21 +99,25 @@ if (RUN_RAW_IDAT_QC) {
   )
   sample_sheet <- dnam_validate_idat_pairs(sample_sheet)
 
-  manifest_to_save <- if (MASK_IDS) dnam_mask_columns(sample_sheet, c(sample_id_col)) else sample_sheet
-  utils::write.csv(
-    manifest_to_save,
-    file.path(output_dir, "01_manifest_rgset", paste0("raw_sample_manifest_validated", mask_suffix, ".csv")),
-    row.names = FALSE
-  )
-
-  if (!all(sample_sheet$idat_pair_exists)) {
-    missing_idats <- sample_sheet[!sample_sheet$idat_pair_exists, , drop = FALSE]
-    missing_to_save <- if (MASK_IDS) dnam_mask_columns(missing_idats, c(sample_id_col)) else missing_idats
+  if (WRITE_RAW_SAMPLE_MANIFEST) {
+    manifest_to_save <- if (MASK_IDS) dnam_mask_columns(sample_sheet, c(sample_id_col)) else sample_sheet
     utils::write.csv(
-      missing_to_save,
-      file.path(output_dir, "01_manifest_rgset", paste0("missing_idats", mask_suffix, ".csv")),
+      manifest_to_save,
+      file.path(output_dir, "01_manifest_rgset", paste0("raw_sample_manifest_validated", mask_suffix, ".csv")),
       row.names = FALSE
     )
+  }
+
+  if (!all(sample_sheet$idat_pair_exists)) {
+    if (WRITE_RAW_SAMPLE_MANIFEST) {
+      missing_idats <- sample_sheet[!sample_sheet$idat_pair_exists, , drop = FALSE]
+      missing_to_save <- if (MASK_IDS) dnam_mask_columns(missing_idats, c(sample_id_col)) else missing_idats
+      utils::write.csv(
+        missing_to_save,
+        file.path(output_dir, "01_manifest_rgset", paste0("missing_idats", mask_suffix, ".csv")),
+        row.names = FALSE
+      )
+    }
     stop("One or more samples are missing red/green IDAT files. See missing_idats.csv.", call. = FALSE)
   }
 
@@ -237,7 +243,8 @@ if (RUN_PROCESSED_BETA_QC) {
       pheno = pheno,
       sample_id_col = sample_id_col,
       replicate_group_cols = replicate_group_cols,
-      pair_data = pair_data
+      pair_data = pair_data,
+      include_replicate_group = INCLUDE_REPLICATE_GROUP
     )
 
     replicate_results <- if (MASK_IDS) dnam_mask_columns(replicate_qc$results, c("sample_1", "sample_2")) else replicate_qc$results

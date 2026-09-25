@@ -31,6 +31,7 @@ The DNAm QC pipeline consists of six steps that can be run in sequence:
 - A single `barcode` column is preferred because it can link raw IDATs, sample metadata, and processed beta matrix columns.
 - Plain CSV and Illumina sample sheet formats are both supported for portability.
 - Validation happens before RGset creation so missing files fail early with a useful table.
+- The validated sample sheet is not written to disk unless explicitly requested, because it carries sample-level metadata such as `Sample_Name` and `Participant_ID`. The default QC outputs carry barcodes only.
 
 ---
 
@@ -130,6 +131,11 @@ red / (red + green + 100)
 - Replicate definition is user-controlled because different studies define replicates differently.
 - Explicit pair files take priority over metadata group inference.
 - If no replicate pairs exist, an empty result table is returned rather than failing.
+- The group key is built from the grouping columns, which for CALERIE means
+  `Participant_ID` and `Time_Point`. It is used to find pairs but is not returned
+  by default: `results` holds only `sample_1`, `sample_2`, and `correlation`, so
+  subject identifiers never reach a shared output. Passing
+  `include_replicate_group = TRUE` adds the column back for internal use.
 
 ---
 
@@ -176,6 +182,17 @@ replicate_qc <- dnam_replicate_correlations(beta_mat, pheno = sample_sheet,
                                             replicate_group_cols = c("Participant_ID", "Time_Point"))
 uniformity_qc <- dnam_uniformity_check(beta_mat)
 ```
+
+## Output Privacy
+
+`bead_qc$per_sample` and `detection_qc$per_sample` are the only per-sample tables
+written by the raw steps, and they hold the sample ID plus the QC metric, the
+threshold, and the pass flag. The sample sheet is never merged into them, so
+`Sample_Name`, `Participant_ID`, `Time_Point`, plate, well, and IDAT file paths
+cannot leak into a per-sample output.
+
+`tests/test_dnam_qc.R` enforces this by scanning every output CSV for those
+columns and by checking that each opt-in flag defaults to `FALSE`.
 
 ## Dependencies
 

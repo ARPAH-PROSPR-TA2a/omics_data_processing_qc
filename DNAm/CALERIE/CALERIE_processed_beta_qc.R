@@ -20,7 +20,7 @@ sample_sheet_file <- Sys.getenv("CALERIE_SAMPLE_SHEET", "Preprocessing_cell_coun
 
 # Processed beta matrix. Strongly recommend .rds for large CALERIE data.
 # Expected shape: CpGs/features as rows, samples as columns.
-beta_file <- Sys.getenv("CALERIE_BETA_FILE", "EDIT_ME/path/to/CALERIE_processed_betas.rds")
+beta_file <- Sys.getenv("CALERIE_BETA_FILE", "~/PC_clocks/CALERIE/Blood/Output/Data/GRSet_fully_filtered_bmiq_chunk.rds")
 
 # Output folder. This follows the same output root used by CALERIE_raw_idat_qc.R.
 output_dir <- Sys.getenv("CALERIE_PROCESSED_QC_OUTPUT_DIR", "Code/FAST_DNAmQC/CALERIE_processed_beta_qc_output")
@@ -44,6 +44,14 @@ uniformity_p_threshold <- 0.05
 # Which steps to run.
 RUN_REPLICATE_CORRELATIONS <- TRUE
 RUN_UNIFORMITY_CHECK <- TRUE
+
+# Optional sample-level metadata. Both default to FALSE so that the
+# collaborator-facing outputs only ever contain barcodes and QC metrics.
+# include_sample_name adds Sample_Name to sample_sheet_barcodes_missing_from_beta.csv.
+# include_replicate_group adds the Participant_ID + Time_Point group key to
+# replicate_correlations.csv.
+include_sample_name <- tolower(Sys.getenv("CALERIE_INCLUDE_SAMPLE_NAME", "FALSE")) %in% c("true", "t", "1", "yes", "y")
+include_replicate_group <- tolower(Sys.getenv("CALERIE_INCLUDE_REPLICATE_GROUP", "FALSE")) %in% c("true", "t", "1", "yes", "y")
 
 # ==============================================================================
 # PACKAGE CHECKS
@@ -155,7 +163,7 @@ read_beta_matrix <- function(path) {
   beta_mat
 }
 
-validate_beta_sample_match <- function(samples, beta_mat) {
+validate_beta_sample_match <- function(samples, beta_mat, include_sample_name = FALSE) {
   samples_in_beta <- samples$Barcode %in% colnames(beta_mat)
   beta_in_samples <- colnames(beta_mat) %in% samples$Barcode
 
@@ -175,9 +183,17 @@ validate_beta_sample_match <- function(samples, beta_mat) {
     stringsAsFactors = FALSE
   )
 
+  missing_from_beta <- data.frame(
+    Barcode = samples$Barcode[!samples_in_beta],
+    stringsAsFactors = FALSE
+  )
+  if (include_sample_name && "Sample_Name" %in% names(samples)) {
+    missing_from_beta$Sample_Name <- samples$Sample_Name[!samples_in_beta]
+  }
+
   list(
     match_summary = match_summary,
-    missing_from_beta = samples[!samples_in_beta, , drop = FALSE],
+    missing_from_beta = missing_from_beta,
     missing_from_sample_sheet = data.frame(
       Barcode = colnames(beta_mat)[!beta_in_samples],
       stringsAsFactors = FALSE
@@ -190,7 +206,25 @@ calculate_replicate_correlations <- function(beta_mat,
                                              person_col,
                                              timepoint_col,
                                              pair_file = NULL,
+                                             include_replicate_group = FALSE,
                                              method = "pearson") {
+  result_cols <- if (include_replicate_group) {
+    c("replicate_group", "sample_1", "sample_2", "correlation")
+  } else {
+    c("sample_1", "sample_2", "correlation")
+  }
+
+  empty_results <- function() {
+    empty <- data.frame(
+      replicate_group = character(),
+      sample_1 = character(),
+      sample_2 = character(),
+      correlation = numeric(),
+      stringsAsFactors = FALSE
+    )
+    empty[, result_cols, drop = FALSE]
+  }
+
   if (!is.null(pair_file)) {
     if (!file.exists(pair_file)) {
       stop("pair_file does not exist: ", pair_file, call. = FALSE)
@@ -238,13 +272,7 @@ calculate_replicate_correlations <- function(beta_mat,
   pairs <- pairs[pairs$sample_1 %in% colnames(beta_mat) & pairs$sample_2 %in% colnames(beta_mat), , drop = FALSE]
 
   if (!nrow(pairs)) {
-    results <- data.frame(
-      replicate_group = character(),
-      sample_1 = character(),
-      sample_2 = character(),
-      correlation = numeric(),
-      stringsAsFactors = FALSE
-    )
+    results <- empty_results()
   } else {
     pairs$correlation <- vapply(seq_len(nrow(pairs)), function(i) {
       stats::cor(
@@ -254,7 +282,7 @@ calculate_replicate_correlations <- function(beta_mat,
         method = method
       )
     }, numeric(1))
-    results <- pairs[, c("replicate_group", "sample_1", "sample_2", "correlation"), drop = FALSE]
+    results <- pairs[, result_cols, drop = FALSE]
   }
 
   summary <- data.frame(
@@ -321,7 +349,9 @@ cat("Sample sheet:", sample_sheet_file, "\n")
 cat("Beta file:", beta_file, "\n")
 cat("Output dir:", output_dir, "\n")
 cat("Person column:", person_col, "\n")
-cat("Timepoint column:", timepoint_col, "\n\n")
+cat("Timepoint column:", timepoint_col, "\n")
+cat("Include sample name:", include_sample_name, "\n")
+cat("Include replicate group:", include_replicate_group, "\n\n")
 
 samples <- read_calerie_sample_sheet(sample_sheet_file)
 samples <- add_calerie_barcode(samples)
@@ -335,7 +365,7 @@ beta_mat <- read_beta_matrix(beta_file)
 
 cat("Beta matrix dimensions:", nrow(beta_mat), "features x", ncol(beta_mat), "samples\n")
 
-match_info <- validate_beta_sample_match(samples, beta_mat)
+match_info <- validate_beta_sample_match(samples, beta_mat, include_sample_name = include_sample_name)
 utils::write.csv(
   match_info$match_summary,
   file.path(output_dir, "01_beta_sample_matching", "beta_sample_match_summary.csv"),
@@ -365,6 +395,7 @@ if (RUN_REPLICATE_CORRELATIONS) {
     person_col = person_col,
     timepoint_col = timepoint_col,
     pair_file = pair_file,
+    include_replicate_group = include_replicate_group,
     method = correlation_method
   )
 

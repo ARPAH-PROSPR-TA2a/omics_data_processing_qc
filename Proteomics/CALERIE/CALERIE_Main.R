@@ -21,7 +21,7 @@ source("../../ARPAH_Misc/ARPAH-PROSPR-TA2a/omics_data_processing_qc/Proteomics/S
 # For testing, use example data:
 # install.packages(SomaDataIO)
 library(SomaDataIO)
-library(ggplot2)
+library(tidyverse)
 dat <- read_adat("Data/0_Data/Data_and_Script_for_Analysis/L0123001614_L0125003207_v5.0_EDTAPlasma.bridge.hybNorm.medNormInt.plateScale.leakDetection.calibrate.anmlQC.qcCheck.anmlSMP.adat")
 
 # ==============================================================================

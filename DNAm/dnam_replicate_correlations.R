@@ -5,8 +5,26 @@ dnam_replicate_correlations <- function(beta_mat,
                                         pair_data = NULL,
                                         sample_1_col = "sample_1",
                                         sample_2_col = "sample_2",
+                                        include_replicate_group = FALSE,
                                         method = "pearson") {
   beta_mat <- as.matrix(beta_mat)
+
+  result_cols <- if (include_replicate_group) {
+    c("replicate_group", "sample_1", "sample_2", "correlation")
+  } else {
+    c("sample_1", "sample_2", "correlation")
+  }
+
+  empty_results <- function() {
+    empty <- data.frame(
+      replicate_group = character(),
+      sample_1 = character(),
+      sample_2 = character(),
+      correlation = numeric(),
+      stringsAsFactors = FALSE
+    )
+    empty[, result_cols, drop = FALSE]
+  }
 
   if (!is.null(pair_data)) {
     required_cols <- c(sample_1_col, sample_2_col)
@@ -37,7 +55,7 @@ dnam_replicate_correlations <- function(beta_mat,
     split_samples <- split_samples[lengths(split_samples) > 1]
 
     if (!length(split_samples)) {
-      pairs <- data.frame(replicate_group = character(), sample_1 = character(), sample_2 = character())
+      pairs <- empty_results()
     } else {
       pairs <- do.call(rbind, lapply(names(split_samples), function(group_name) {
         pair_matrix <- utils::combn(split_samples[[group_name]], 2)
@@ -54,13 +72,7 @@ dnam_replicate_correlations <- function(beta_mat,
   pairs <- pairs[pairs$sample_1 %in% colnames(beta_mat) & pairs$sample_2 %in% colnames(beta_mat), , drop = FALSE]
 
   if (!nrow(pairs)) {
-    results <- data.frame(
-      replicate_group = character(),
-      sample_1 = character(),
-      sample_2 = character(),
-      correlation = numeric(),
-      stringsAsFactors = FALSE
-    )
+    results <- empty_results()
   } else {
     pairs$correlation <- vapply(seq_len(nrow(pairs)), function(i) {
       stats::cor(
@@ -70,7 +82,7 @@ dnam_replicate_correlations <- function(beta_mat,
         method = method
       )
     }, numeric(1))
-    results <- pairs
+    results <- pairs[, result_cols, drop = FALSE]
   }
 
   summary <- data.frame(

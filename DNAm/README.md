@@ -185,7 +185,15 @@ result <- dnam_replicate_correlations(beta_mat,
                                       sample_2_col = "sample_2")
 ```
 
-If no replicate pairs are found, the function returns an empty results table and a valid summary.
+**Returns:**
+
+- `results`: `sample_1`, `sample_2` and `correlation`. The `replicate_group`
+  column, which combines the grouping columns and can contain
+  `Participant_ID`, is only returned when `include_replicate_group = TRUE`.
+- `summary`: Number of pairs plus mean, median, and minimum correlation
+
+If no replicate pairs are found, the function returns an empty results table with
+the same columns and a valid summary.
 
 ---
 
@@ -231,18 +239,32 @@ RUN_UNIFORMITY_CHECK <- TRUE
 
 MASK_IDS <- FALSE
 SAVE_RGSET <- FALSE
-SAVE_CONTROL_PCA_OBJECT <- TRUE
+SAVE_CONTROL_PCA_OBJECT <- FALSE
+WRITE_RAW_SAMPLE_MANIFEST <- FALSE
+INCLUDE_REPLICATE_GROUP <- FALSE
 ```
+
+Every privacy setting defaults to `FALSE`, so a default run shares barcodes and
+QC metrics only. Set a flag to `TRUE` only when you have a reason to produce a
+restricted artifact.
+
+| Setting | Controls | Default output when TRUE |
+|---------|----------|--------------------------|
+| `WRITE_RAW_SAMPLE_MANIFEST` | `raw_sample_manifest_validated.csv` and `missing_idats.csv`, which contain the full sample sheet | `01_manifest_rgset/` |
+| `INCLUDE_REPLICATE_GROUP` | adds the `Participant_ID` + `Time_Point` group key to `replicate_correlations.csv` | `05_replicate_correlations/` |
+| `SAVE_CONTROL_PCA_OBJECT` | `restricted_objects/control_probe_pca.rds` | `restricted_objects/` |
+| `SAVE_RGSET` | `restricted_objects/RGset.rds` | `restricted_objects/` |
+| `MASK_IDS` | replaces sample IDs in outputs with `Sample_1`, `Sample_2`, ... | `_masked` filename suffix |
 
 ## CALERIE Raw IDAT QC Shortcut
 
 For the CALERIE raw IDAT QC workflow, use the focused script:
 
 ```bash
-Rscript CALERIE_raw_idat_qc.R
+Rscript CALERIE/CALERIE_raw_idat_qc.R
 ```
 
-Edit only these lines at the top of `CALERIE_raw_idat_qc.R`:
+Edit only these lines at the top of `CALERIE/CALERIE_raw_idat_qc.R`:
 
 ```r
 sample_sheet_file <- "path/to/CALERIE_samplesheet.csv"
@@ -266,6 +288,43 @@ Barcode_Grn.idat
 
 The CALERIE shortcut loads one chunk of samples at a time, extracts control-probe values, bead QC, and detection p-value QC, removes the chunk RGset from memory, and runs control-probe PCA after all chunks are complete. This is the recommended script for cloud runs with hundreds of samples.
 
+Both CALERIE scripts take their configuration from environment variables, so no
+editing is needed if you prefer that. Every optional, sample-level output is off
+by default:
+
+| Environment variable | Default | Controls |
+|-----------------------|---------|----------|
+| `CALERIE_SAMPLE_SHEET` | - | Sample sheet path |
+| `CALERIE_IDAT_DIR` | - | IDAT folder path |
+| `CALERIE_OUTPUT_DIR` | - | Raw QC output folder |
+| `CALERIE_PROCESSED_QC_OUTPUT_DIR` | - | Processed beta QC output folder |
+| `CALERIE_BETA_FILE` | `EDIT_ME/...` | Processed beta matrix path |
+| `CALERIE_CHUNK_SIZE` | `608` | Samples loaded per RGset |
+| `CALERIE_WRITE_RAW_SAMPLE_MANIFEST` | `FALSE` | `raw_sample_manifest_validated.csv` and `missing_idats.csv` |
+| `CALERIE_SAVE_CONTROL_PCA_OBJECT` | `FALSE` | `restricted_objects/control_probe_pca.rds` |
+| `CALERIE_SAVE_CHUNK_RGSETS` | `FALSE` | Per-chunk `RGset_chunk_*.rds` |
+| `CALERIE_INCLUDE_SAMPLE_NAME` | `FALSE` | `Sample_Name` in `sample_sheet_barcodes_missing_from_beta.csv` |
+| `CALERIE_INCLUDE_REPLICATE_GROUP` | `FALSE` | `replicate_group` in `replicate_correlations.csv` |
+| `CALERIE_PERSON_COL` | `Participant_ID` | Replicate grouping column |
+| `CALERIE_TIMEPOINT_COL` | `Time_Point` | Replicate grouping column |
+| `CALERIE_PAIR_FILE` | empty | Explicit replicate pair file |
+
+```bash
+CALERIE_SAMPLE_SHEET=/path/to/samplesheet.csv \
+CALERIE_IDAT_DIR=/path/to/IDATs \
+CALERIE_OUTPUT_DIR=./raw_out \
+Rscript CALERIE/CALERIE_raw_idat_qc.R
+```
+
+Run the processed beta QC separately, since raw IDAT QC can take a long time:
+
+```bash
+CALERIE_SAMPLE_SHEET=/path/to/samplesheet.csv \
+CALERIE_BETA_FILE=/path/to/processed_betas.rds \
+CALERIE_PROCESSED_QC_OUTPUT_DIR=./processed_out \
+Rscript CALERIE/CALERIE_processed_beta_qc.R
+```
+
 ---
 
 ## Output Files
@@ -275,9 +334,9 @@ Outputs are organized as:
 ```text
 output/
 ├── 01_manifest_rgset/
-│   ├── raw_sample_manifest_validated.csv
-│   ├── missing_idats.csv
-│   └── rgset_summary.csv
+│   ├── rgset_summary.csv
+│   ├── raw_sample_manifest_validated.csv   (only if WRITE_RAW_SAMPLE_MANIFEST)
+│   └── missing_idats.csv                   (only if WRITE_RAW_SAMPLE_MANIFEST)
 ├── 02_control_probe_pca/
 │   ├── control_probe_pca_scores.csv
 │   ├── control_probe_pca_variance_explained.csv
@@ -295,19 +354,74 @@ output/
 │   ├── uniformity_check.csv
 │   └── uniformity_summary.csv
 └── restricted_objects/
-    ├── RGset.rds
-    └── control_probe_pca.rds
+    ├── RGset.rds                (only if SAVE_RGSET)
+    └── control_probe_pca.rds    (only if SAVE_CONTROL_PCA_OBJECT)
 ```
+
+`replicate_correlations.csv` contains `sample_1`, `sample_2` and `correlation`.
+The `replicate_group` column is only present when `INCLUDE_REPLICATE_GROUP` is
+`TRUE`.
+
+The CALERIE processed-beta script adds one folder:
+
+```text
+CALERIE_processed_beta_qc_output/
+├── 01_beta_sample_matching/
+│   ├── beta_sample_match_summary.csv
+│   ├── sample_sheet_barcodes_missing_from_beta.csv
+│   └── beta_columns_missing_from_sample_sheet.csv
+├── 02_replicate_correlations/
+├── 03_uniformity_check/
+└── processed_beta_qc_summary.csv
+```
+
+`sample_sheet_barcodes_missing_from_beta.csv` contains only `Barcode`. It also
+carries `Sample_Name` when `CALERIE_INCLUDE_SAMPLE_NAME=TRUE`.
 
 When `MASK_IDS = TRUE`, sample-level output filenames include `_masked`.
 
 ---
 
+## Tests
+
+`tests/test_dnam_qc.R` checks that no output carries sample-level metadata unless
+the matching opt-in flag is set, and that every opt-in flag defaults to `FALSE`.
+No data is stored in this repository; point the test at your own data.
+
+```bash
+Rscript tests/test_dnam_qc.R --data_dir=/path/to/Data --scratch_dir=/path/to/project
+```
+
+| Argument | Meaning |
+|----------|---------|
+| `--data_dir` | Folder holding the sample sheet CSV, `IDATs/`, and a processed beta matrix `.rds` |
+| `--scratch_dir` | Project folder containing the CLI scripts in `Code/`, used for the scratch-script checks |
+| `DNAM_TEST_DATA_DIR` | Environment variable fallback for `--data_dir` |
+| `DNAM_TEST_BETA_ROWS` | Beta rows to use for the processed-beta runs. Defaults to `2000`; set `0` for the full matrix |
+
+---
+
 ## Privacy
 
-Set `MASK_IDS = TRUE` in `Main.R` to mask sample IDs in standard outputs. Full R objects such as `RGset.rds` and `control_probe_pca.rds` may contain participant-level structure and should be treated as restricted outputs.
+Default outputs contain barcodes and QC metrics only. Sample-level identifiers
+such as `Sample_Name`, `Participant_ID`, `Time_Point`, plate, well, and file
+paths never reach a shared output. Each of these is available only through an
+explicit opt-in:
 
-If a sample sheet contains direct identifiers or sensitive metadata, remove those columns before sharing outputs or before running this collaborator-facing QC pipeline.
+- `raw_sample_manifest_validated.csv` and `missing_idats.csv` via
+  `WRITE_RAW_SAMPLE_MANIFEST` or `CALERIE_WRITE_RAW_SAMPLE_MANIFEST`
+- the `replicate_group` column via `INCLUDE_REPLICATE_GROUP` or
+  `CALERIE_INCLUDE_REPLICATE_GROUP`
+- the `Sample_Name` column in `sample_sheet_barcodes_missing_from_beta.csv` via
+  `CALERIE_INCLUDE_SAMPLE_NAME`
+
+Full R objects such as `RGset.rds` and `control_probe_pca.rds` may contain
+participant-level structure, are written to `restricted_objects/`, and are opt-in
+only.
+
+If a sample sheet contains direct identifiers or sensitive metadata, remove those
+columns before sharing outputs or before running this collaborator-facing QC
+pipeline.
 
 ---
 
